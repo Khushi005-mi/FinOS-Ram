@@ -1,5 +1,5 @@
 from typing import Optional
-import uuid
+from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
@@ -15,7 +15,7 @@ security_scheme = HTTPBearer(auto_error=False)
 class TokenData(BaseModel):
     user_id: str
     email: Optional[EmailStr] = None
-    organization_id: str
+    organization_id: UUID
 
 
 # 3. Security Dependency Function

@@ -2,12 +2,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 
 from app.api.router import api_router
 from app.core.config import settings
 from app.db.base import Base
-from app.db.session import engine
-# Import all ORM models so Base.metadata discovers all tables!
+from app.db.models.organization import Organization
+from app.db.session import AsyncSessionLocal, engine
 import app.db.models  # noqa: F401
 
 
@@ -15,25 +16,44 @@ import app.db.models  # noqa: F401
 async def lifespan(app: FastAPI):
     """
     Application Lifespan Event Handler.
-    Runs startup logic when the server boots, auto-creating any missing database tables.
+    Runs startup logic on boot: auto-creates missing SQL tables and auto-seeds default organization.
     """
     print(f"🚀 Starting {settings.PROJECT_NAME} (v{settings.VERSION})...")
     print(f"🔧 Environment: {settings.ENVIRONMENT} | Debug: {settings.DEBUG}")
 
-    # Auto-create all missing SQL tables on boot
+    # 1. Auto-create all missing SQL tables on boot
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         print("✓ Database tables verified and ready!")
-    except Exception as err:
-        print(f"⚠️ Database table check warning: {err}")
 
-    yield  # Server runs and handles HTTP requests here
+        # 2. Auto-seed default tenant organization if missing
+        async with AsyncSessionLocal() as db:
+            org_id = "00000000-0000-0000-0000-000000000001"
+            stmt = select(Organization).where(Organization.id == org_id)
+            result = await db.execute(stmt)
+            if not result.scalar_one_or_none():
+                demo_org = Organization(
+                    id=org_id,
+                    name="Apex Manufacturing Ltd.",
+                    slug="apex-manufacturing",
+                    industry_type="MANUFACTURING",
+                    currency="INR",
+                    fiscal_year_start=4,
+                    is_active=True,
+                )
+                db.add(demo_org)
+                await db.commit()
+                print("✓ Auto-seeded Demo Organization in database!")
+    except Exception as err:
+        print(f"⚠️ Lifespan DB init warning: {err}")
+
+    yield  # Server handles HTTP requests here
 
     print(f"🛑 Shutting down {settings.PROJECT_NAME} cleanly...")
 
 
-# 1. Instantiate the FastAPI Application
+# 1. Instantiate FastAPI Application
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
@@ -44,7 +64,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# 2. Configure Cross-Origin Resource Sharing (CORS) Middleware
+# 2. Configure CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -53,7 +73,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 3. Mount Centralized API Router Registry (/api/v1)
+# 3. Mount Router Registry (/api/v1)
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
@@ -65,10 +85,6 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
     summary="System Health & Status Verification Check",
 )
 async def health_check():
-    """
-    System Health Check Endpoint.
-    Used by Render/AWS load balancers to verify the server is active and healthy.
-    """
     return JSONResponse(
         status_code=200,
         content={

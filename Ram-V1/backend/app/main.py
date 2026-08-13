@@ -5,23 +5,35 @@ from fastapi.responses import JSONResponse
 
 from app.api.router import api_router
 from app.core.config import settings
+from app.db.base import Base
+from app.db.session import engine
+# Import all ORM models so Base.metadata discovers all tables!
+import app.db.models  # noqa: F401
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Application Lifespan Event Handler.
-    Runs startup logic when the server boots, and cleanup logic when it shuts down.
+    Runs startup logic when the server boots, auto-creating any missing database tables.
     """
     print(f"🚀 Starting {settings.PROJECT_NAME} (v{settings.VERSION})...")
     print(f"🔧 Environment: {settings.ENVIRONMENT} | Debug: {settings.DEBUG}")
+
+    # Auto-create all missing SQL tables on boot
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("✓ Database tables verified and ready!")
+    except Exception as err:
+        print(f"⚠️ Database table check warning: {err}")
 
     yield  # Server runs and handles HTTP requests here
 
     print(f"🛑 Shutting down {settings.PROJECT_NAME} cleanly...")
 
 
-# 1. Instantiate the FastAPI Application (Uvicorn looks for this variable named 'app')
+# 1. Instantiate the FastAPI Application
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,

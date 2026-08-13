@@ -2,7 +2,6 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
-# 1. Single Executive KPI Metric Schema
 class KpiMetricSchema(BaseModel):
     title: str
     value: str
@@ -13,9 +12,10 @@ class KpiMetricSchema(BaseModel):
 
     class Config:
         populate_by_name = True
+        from_attributes = True
+        orm_mode = True
 
 
-# 2. Executive Dashboard Overview Metrics Response Schema
 class DashboardMetricsResponse(BaseModel):
     revenue: KpiMetricSchema
     cogs: KpiMetricSchema
@@ -24,9 +24,10 @@ class DashboardMetricsResponse(BaseModel):
 
     class Config:
         populate_by_name = True
+        from_attributes = True
+        orm_mode = True
 
 
-# 3. Monthly Trend Point Schema for Recharts
 class MonthlyTrendPointSchema(BaseModel):
     month: str
     revenue: float
@@ -36,11 +37,17 @@ class MonthlyTrendPointSchema(BaseModel):
 
     class Config:
         populate_by_name = True
+        from_attributes = True
+        orm_mode = True
 
 
-# 4. Executive CFO Insight Schema
 class ExecutiveInsightSchema(BaseModel):
     id: str
     type: str
     title: str
     summary: str
+
+    class Config:
+        populate_by_name = True
+        from_attributes = True
+        orm_mode = True

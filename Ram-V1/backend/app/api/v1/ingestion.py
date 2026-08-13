@@ -28,8 +28,7 @@ async def upload_financial_batch(
     try:
         organization_id = str(current_user.organization_id)
     except ValueError:
-        organization_id = "00000000-0000-0000-0000-000000000001"
-
+        organization_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
     result = await IngestionService.process_batch(
         db=db,
         files=files,

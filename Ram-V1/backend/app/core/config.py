@@ -33,7 +33,7 @@ class Settings(BaseSettings):
 
     # PostgreSQL Database Connection URL (Asyncpg)
     DATABASE_URL: str = Field(
-        default="postgresql+asyncpg://postgres.ytdngeeuunkimldmjonu:Kahahailaptop@5@aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
+        default="postgresql+asyncpg://postgres.ytdngeeuunkimldmjonu:Kahahailaptop@aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
         env="DATABASE_URL",
     )
 

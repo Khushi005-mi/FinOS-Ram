@@ -1,5 +1,5 @@
+import uuid
 from typing import Optional
-from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt

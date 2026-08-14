@@ -15,6 +15,7 @@ class Organization(Base):
     """
     __tablename__ = "organizations"
 
+    # Primary Key (UUID v4)
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
@@ -22,6 +23,7 @@ class Organization(Base):
         nullable=False,
     )
 
+    # Core Business Metadata
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     industry_type: Mapped[str] = mapped_column(String(50), default="GENERAL_SMB", nullable=False)
@@ -29,7 +31,7 @@ class Organization(Base):
     fiscal_year_start: Mapped[int] = mapped_column(Integer, default=4, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    # Active Dataset Tracking (Stores UUID of the currently selected upload batch)
+    # Explicit Active Dataset Tracking
     active_batch_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(

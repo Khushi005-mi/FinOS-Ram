@@ -1,5 +1,3 @@
-import uuid
-from uuid import UUID
 from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -12,11 +10,11 @@ from app.core.config import settings
 security_scheme = HTTPBearer(auto_error=False)
 
 
-# 2. Pydantic Schema for Verified JWT Claims (THIS WAS MISSING)
+# 2. Pydantic Schema for Verified JWT Claims
 class TokenData(BaseModel):
     user_id: str
     email: Optional[EmailStr] = None
-    organization_id: UUID
+    organization_id: str
 
 
 # 3. Security Dependency Function
@@ -39,7 +37,7 @@ async def get_current_tenant_user(
             return TokenData(
                 user_id="demo-user-uuid-123",
                 email="cfo@apexmanufacturing.com",
-                organization_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+                organization_id="00000000-0000-0000-0000-000000000001",
             )
         raise credentials_exception
 
@@ -64,7 +62,7 @@ async def get_current_tenant_user(
         organization_id: str = (
             user_metadata.get("organization_id")
             or app_metadata.get("organization_id")
-            or uuid.UUID("00000000-0000-0000-0000-000000000001")
+            or "00000000-0000-0000-0000-000000000001"
         )
 
         if user_id is None:

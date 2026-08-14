@@ -8,16 +8,17 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.config import settings
 
-# 1. Global Singleton Engine & Connection Pool
+# 1. Global Singleton Engine configured for Supabase PgBouncer (statement_cache_size = 0)
 engine: AsyncEngine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=20,
+    connect_args={"statement_cache_size": 0},  # Required for Supabase PgBouncer Pooler
 )
 
-# 2. Async Session Factory (Note the trailing underscore 'class_')
+# 2. Async Session Factory
 AsyncSessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
     bind=engine,
     class_=AsyncSession,

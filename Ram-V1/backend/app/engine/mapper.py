@@ -3,7 +3,6 @@ from decimal import Decimal
 from typing import Dict, List, Optional
 import pandas as pd
 
-# FinOS Standard Canonical Target Fields
 CANONICAL_FIELDS = [
     "transaction_date",
     "account_code",
@@ -19,72 +18,96 @@ CANONICAL_FIELDS = [
 def auto_map_columns(raw_columns: List[str]) -> Dict[str, str]:
     """
     Heuristic Auto-Mapping Algorithm.
-    Analyzes raw column headers and guesses the best matching FinOS canonical field.
-    Returns dictionary mapping: { canonical_field_name: raw_header_name }
+    Analyzes actual raw column headers from the uploaded file and maps them to FinOS canonical fields.
     """
     mapping: Dict[str, str] = {}
 
     for col in raw_columns:
-        c = col.lower().strip()
-        c_clean = re.sub(r"[^a-z0-9]", "", c)
+        c = str(col).lower().strip()
 
         # Date Matching
         if "transaction_date" not in mapping:
-            if any(k in c for k in ["date", "txn_date", "post_date", "period"]):
+            if any(k in c for k in ["date", "txn_date", "post_date", "period", "day", "time"]):
                 mapping["transaction_date"] = col
                 continue
 
-        # Debit / Withdrawal Matching
+        # Debit / Expense / Withdrawal Matching
         if "debit" not in mapping:
-            if any(k in c for k in ["debit", "withdrawal", "dr", "dr_amount", "expense_amount"]):
+            if any(k in c for k in ["debit", "withdrawal", "dr", "expense", "cost", "payout"]):
                 mapping["debit"] = col
                 continue
 
-        # Credit / Deposit Matching
+        # Credit / Deposit / Revenue Matching
         if "credit" not in mapping:
-            if any(k in c for k in ["credit", "deposit", "cr", "cr_amount", "income_amount"]):
+            if any(k in c for k in ["credit", "deposit", "cr", "income", "revenue", "sales", "receipt"]):
                 mapping["credit"] = col
                 continue
 
         # Account Name / Description Matching
         if "account_name" not in mapping:
-            if any(k in c for k in ["account_name", "account", "particulars", "description", "category"]):
+            if any(k in c for k in ["account", "particulars", "description", "category", "item", "name", "vendor", "customer"]):
                 mapping["account_name"] = col
                 continue
 
         # Account Code Matching
         if "account_code" not in mapping:
-            if any(k in c for k in ["account_code", "gl_code", "code", "acct_id"]):
+            if any(k in c for k in ["code", "gl", "acct_id", "id", "num"]):
                 mapping["account_code"] = col
                 continue
 
         # Reference ID / Voucher # Matching
         if "reference_id" not in mapping:
-            if any(k in c for k in ["reference", "voucher", "invoice", "ref_no", "chk_no"]):
+            if any(k in c for k in ["reference", "voucher", "invoice", "ref", "chk", "inv"]):
                 mapping["reference_id"] = col
                 continue
+
+    # Fallback for Single "Amount" column (e.g. Sales = Credit, Expenses = Debit)
+    if "debit" not in mapping and "credit" not in mapping:
+        for col in raw_columns:
+            c = str(col).lower().strip()
+            if any(k in c for k in ["amount", "total", "net", "price", "val", "value"]):
+                mapping["credit"] = col
+                mapping["debit"] = col
+                break
 
     return mapping
 
 
 def map_and_normalize_dataframe(
     df: pd.DataFrame,
-    column_mapping: Dict[str, str],
+    column_mapping: Dict[str, str] = None,
     default_category: str = "GENERAL_SMB",
 ) -> pd.DataFrame:
     """
     Applies column mappings to raw DataFrame and converts values into canonical types.
+    Falls back to automatic header detection if mapping is incomplete.
     """
+    if df.empty:
+        return pd.DataFrame(columns=CANONICAL_FIELDS)
+
+    # 1. Run auto-map directly on actual DataFrame columns if mapping is empty or invalid
+    auto_detected = auto_map_columns(list(df.columns))
+
+    # Merge user mapping with auto-detected mapping
+    final_mapping = {}
+    if column_mapping:
+        for k, v in column_mapping.items():
+            if v in df.columns:
+                final_mapping[k] = v
+
+    # Fill any unmapped canonical fields with auto-detected fields
+    for field, raw_col in auto_detected.items():
+        if field not in final_mapping and raw_col in df.columns:
+            final_mapping[field] = raw_col
+
     normalized_df = pd.DataFrame()
 
-    # 1. Invert mapping dictionary: { raw_header: canonical_field }
-    inverted_map = {v: k for k, v in column_mapping.items() if v in df.columns}
+    # 2. Extract mapped columns
+    for canonical_field, raw_col in final_mapping.items():
+        if raw_col in df.columns:
+            normalized_df[canonical_field] = df[raw_col]
 
-    # 2. Select and rename mapped columns
-    for raw_col, canonical_field in inverted_map.items():
-        normalized_df[canonical_field] = df[raw_col]
-
-    # 3. Ensure all canonical fields exist in DataFrame (fill missing with None/0)
+    # 3. Ensure all canonical fields exist
     for field in CANONICAL_FIELDS:
         if field not in normalized_df.columns:
             if field in ["debit", "credit"]:
@@ -92,7 +115,7 @@ def map_and_normalize_dataframe(
             else:
                 normalized_df[field] = None
 
-    # 4. Clean and parse Numeric Debit/Credit columns
+    # 4. Clean Numeric Debit/Credit columns
     for num_col in ["debit", "credit"]:
         normalized_df[num_col] = (
             normalized_df[num_col]
@@ -113,25 +136,26 @@ def map_and_normalize_dataframe(
         normalized_df["transaction_date"], errors="coerce"
     ).dt.strftime("%Y-%m-%d")
 
-    # Drop rows missing critical dates
-    normalized_df = normalized_df.dropna(subset=["transaction_date"])
+    # Fill missing dates with today's date
+    from datetime import date
+    normalized_df["transaction_date"] = normalized_df["transaction_date"].fillna(date.today().strftime("%Y-%m-%d"))
 
     return normalized_df[CANONICAL_FIELDS]
 
 
 def _infer_account_category(account_name: str, fallback: str) -> str:
     """Infers standard accounting category from account name keywords."""
-    name = account_name.lower()
+    name = str(account_name).lower()
 
-    if any(k in name for k in ["sales", "revenue", "income", "billing"]):
+    if any(k in name for k in ["sales", "revenue", "income", "billing", "contract"]):
         return "REVENUE"
-    if any(k in name for k in ["material", "cogs", "inventory", "freight", "direct labor", "production"]):
+    if any(k in name for k in ["material", "cogs", "inventory", "freight", "direct labor", "production", "steel", "alloy", "stock"]):
         return "COGS"
-    if any(k in name for k in ["salary", "rent", "software", "utility", "marketing", "admin", "expense"]):
+    if any(k in name for k in ["salary", "rent", "software", "utility", "marketing", "admin", "expense", "power"]):
         return "OPEX"
-    if any(k in name for k in ["cash", "bank", "receivable", "equipment", "asset"]):
+    if any(k in name for k in ["cash", "bank", "receivable", "equipment", "asset", "hdfc"]):
         return "ASSET"
-    if any(k in name for k in ["payable", "loan", "liability", "tax"]):
+    if any(k in name for k in ["payable", "loan", "liability", "tax", "supplier"]):
         return "LIABILITY"
 
     return fallback

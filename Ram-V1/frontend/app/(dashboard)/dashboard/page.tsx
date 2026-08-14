@@ -1,11 +1,9 @@
 import React from "react";
-import {
-  KpiSummaryGrid,
-  RevenueVsCostChart,
-  UniversalCostBreakdownWidget,
-  ExecutiveInsightsWidget,
-  dashboardApi,
-} from "@/modules/dashboard";
+import { dashboardApi } from "@/modules/dashboard/api/dashboardApi";
+import { KpiSummaryGrid } from "@/modules/dashboard/components/KpiSummaryGrid";
+import { RevenueVsCostChart } from "@/modules/dashboard/components/RevenueVsCostChart";
+import { UniversalCostBreakdownWidget } from "@/modules/dashboard/components/UniversalCostBreakdownWidget";
+import { ExecutiveInsightsWidget } from "@/modules/dashboard/components/ExecutiveInsightsWidget";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

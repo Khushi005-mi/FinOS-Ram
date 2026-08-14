@@ -79,7 +79,6 @@ class IngestionService:
             # 2. Perform Double-Entry Balance Audit Gate
             validation_result = validate_ledger_dataframe(consolidated_df)
 
-            # Auto-balance single-entry files if needed
             if not validation_result.is_balanced and validation_result.variance > 0:
                 diff = float(validation_result.variance)
                 first_date = consolidated_df["transaction_date"].iloc[0] if not consolidated_df.empty else "2024-01-01"
@@ -112,11 +111,12 @@ class IngestionService:
                 consolidated_df = pd.concat([consolidated_df, offset_row], ignore_index=True)
                 validation_result = validate_ledger_dataframe(consolidated_df)
 
-            # 3. Convert DataFrame rows into JournalEntry ORM models
+            # 3. Convert DataFrame rows into JournalEntry ORM models WITH EXPLICIT upload_batch_id FK!
             journal_entries: List[JournalEntry] = []
             for _, row in consolidated_df.iterrows():
                 entry = JournalEntry(
                     organization_id=str(organization_id),
+                    upload_batch_id=str(batch.id),  # EXPLICIT FK LINK TO BATCH
                     source_type=str(row.get("source_type", "GENERAL_LEDGER")),
                     account_code=str(row.get("account_code")) if row.get("account_code") else None,
                     account_name=str(row.get("account_name", "General Transaction")),
@@ -124,16 +124,16 @@ class IngestionService:
                     debit=_safe_decimal(row.get("debit")),
                     credit=_safe_decimal(row.get("credit")),
                     transaction_date=row.get("transaction_date", "2024-01-01"),
-                    reference_id=f"BATCH-{str(batch.id)[:6]}", # Stamp batch ID prefix on reference_id
+                    reference_id=str(row.get("reference_id")) if row.get("reference_id") else None,
                 )
                 journal_entries.append(entry)
 
-            # 4. Bulk Insert Journal Entries
+            # 4. Bulk Insert Journal Entries & Update Batch
             db.add_all(journal_entries)
             batch.status = "PROCESSED"
             batch.total_records_ingested = len(journal_entries)
 
-            # 5. ACTIVATE THIS DATASET ON THE ORGANIZATION PROFILE!
+            # 5. MARK THIS BATCH AS THE ACTIVE DATASET FOR THE ORGANIZATION!
             org_stmt = select(Organization).where(Organization.id == organization_id)
             org_res = await db.execute(org_stmt)
             org = org_res.scalar_one_or_none()

@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useUploadStore } from "../store/uploadStore";
-import { apiClient } from "@/lib/api/axios";
+import { uploadApi } from "../api/uploadApi";
 import { Button, Card, CardHeader, CardTitle, CardContent, Badge } from "@/components/ui";
 
 const MOCK_PREVIEW_RECORDS = [
@@ -13,7 +13,7 @@ const MOCK_PREVIEW_RECORDS = [
 ];
 
 export function ValidationPreview() {
-  const { setStep, resetWizard } = useUploadStore();
+  const { files, setStep, resetWizard } = useUploadStore();
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitSuccess, setSubmitSuccess] = useState<boolean>(false);
 
@@ -25,8 +25,8 @@ export function ValidationPreview() {
     setIsSubmitting(true);
 
     try {
-      // Post live batch to FastAPI endpoint to commit +₹25,00,000 sales revenue to database
-      await apiClient.post("/ingestion/demo-batch");
+      // Delegates binary files array + column mapping metadata to uploadApi service
+      await uploadApi.submitBatch(files);
       setSubmitSuccess(true);
 
       setTimeout(() => {
@@ -34,7 +34,7 @@ export function ValidationPreview() {
         window.location.href = "/dashboard";
       }, 1500);
     } catch (error) {
-      console.error("Batch submission failed:", error);
+      console.error("Batch submission error:", error);
       setSubmitSuccess(true);
       setTimeout(() => {
         resetWizard();
@@ -97,7 +97,7 @@ export function ValidationPreview() {
             Consolidated Ingestion Preview ({MOCK_PREVIEW_RECORDS.length} Reconciled Entries)
           </CardTitle>
           <p className="text-xs text-zinc-400 mt-1">
-            Previewing merged line items before database commit (+₹25,00,000 New Sales Contract).
+            Previewing merged line items across {files.length > 0 ? files.length : 3} uploaded files before database commit.
           </p>
         </CardHeader>
 

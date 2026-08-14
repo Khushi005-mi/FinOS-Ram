@@ -9,16 +9,19 @@ export function MultiFileDropzone() {
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const { files, addFiles, setStep } = useUploadStore();
 
+  // 1. Intercept Drag Over Event
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(true);
   };
 
+  // 2. Intercept Drag Leave Event
   const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
   };
 
+  // 3. Handle File Drop Event
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
@@ -37,6 +40,7 @@ export function MultiFileDropzone() {
     }
   };
 
+  // 4. Handle File Input Browse Click
   const handleFileInput = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const validFiles = Array.from(e.target.files);
@@ -46,6 +50,7 @@ export function MultiFileDropzone() {
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-6">
+      {/* Drag & Drop Visual Zone */}
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -87,8 +92,10 @@ export function MultiFileDropzone() {
         </label>
       </div>
 
+      {/* List of Attached Files & Source Type Dropdowns */}
       <FileList />
 
+      {/* Wizard Next Step Action Button */}
       {files.length > 0 && (
         <div className="flex justify-end pt-4">
           <Button

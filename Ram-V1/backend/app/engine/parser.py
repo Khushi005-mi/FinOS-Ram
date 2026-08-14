@@ -35,11 +35,13 @@ def _parse_excel(file_bytes: bytes) -> pd.DataFrame:
     df = pd.read_excel(buffer, engine="openpyxl" if buffer.getvalue().startswith(b"PK") else None)
     return _clean_dataframe(df)
 
+
 def _parse_csv(file_bytes: bytes) -> pd.DataFrame:
     """Parses binary CSV bytes into a DataFrame."""
     buffer = io.BytesIO(file_bytes)
     df = pd.read_csv(buffer, encoding="utf-8", on_bad_lines="skip")
     return _clean_dataframe(df)
+
 
 def _parse_pdf(file_bytes: bytes) -> pd.DataFrame:
     """
@@ -55,6 +57,7 @@ def _parse_pdf(file_bytes: bytes) -> pd.DataFrame:
                 for row in table:
                     if any(cell is not None and str(cell).strip() != "" for cell in row):
                         extracted_rows.append(row)
+
     if not extracted_rows:
         raise FileParsingError("No readable tabular data found in PDF file.")
 
@@ -63,6 +66,8 @@ def _parse_pdf(file_bytes: bytes) -> pd.DataFrame:
 
     df = pd.DataFrame(data_rows, columns=headers)
     return _clean_dataframe(df)
+
+
 def _clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
     Normalizes headers, strips whitespace, and removes empty rows/columns.

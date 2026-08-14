@@ -32,22 +32,21 @@ async def get_dashboard_metrics(
     org_stmt = select(Organization).where(Organization.id == org_uuid)
     org_result = await db.execute(org_stmt)
     org = org_result.scalar_one_or_none()
-    currency_code = org.currency if org else "INR"
-    active_batch_id = org.active_batch_id if org else None
+    currency_code = getattr(org, "currency", "INR") if org else "INR"
+    active_batch_id = getattr(org, "active_batch_id", None) if org else None
 
-    # 2. Query Journal Entries (Isolate to active_batch_id if present)
-    stmt = select(JournalEntry).where(JournalEntry.organization_id == org_uuid)
-    
+    # 2. Query Journal Entries ISOLATED TO ACTIVE BATCH!
+    stmt = select(JournalEntry).where(JournalEntry.organization_id == str(org_uuid))
+
     if active_batch_id:
-        batch_prefix = f"BATCH-{active_batch_id[:6]}"
-        stmt = stmt.where(JournalEntry.reference_id == batch_prefix)
+        stmt = stmt.where(JournalEntry.upload_batch_id == str(active_batch_id))
 
     result = await db.execute(stmt)
     entries = result.scalars().all()
 
     # Fallback to all tenant entries if no active batch filter match
     if not entries and active_batch_id:
-        fallback_stmt = select(JournalEntry).where(JournalEntry.organization_id == org_uuid)
+        fallback_stmt = select(JournalEntry).where(JournalEntry.organization_id == str(org_uuid))
         result = await db.execute(fallback_stmt)
         entries = result.scalars().all()
 
@@ -68,7 +67,6 @@ async def get_dashboard_metrics(
             ]
         )
 
-    # 4. Compute and Return Metrics
     return compute_executive_metrics(df, currency_code=currency_code)
 
 
@@ -89,18 +87,17 @@ async def get_monthly_trends_data(
     org_stmt = select(Organization).where(Organization.id == org_uuid)
     org_result = await db.execute(org_stmt)
     org = org_result.scalar_one_or_none()
-    active_batch_id = org.active_batch_id if org else None
+    active_batch_id = getattr(org, "active_batch_id", None) if org else None
 
-    stmt = select(JournalEntry).where(JournalEntry.organization_id == org_uuid)
+    stmt = select(JournalEntry).where(JournalEntry.organization_id == str(org_uuid))
     if active_batch_id:
-        batch_prefix = f"BATCH-{active_batch_id[:6]}"
-        stmt = stmt.where(JournalEntry.reference_id == batch_prefix)
+        stmt = stmt.where(JournalEntry.upload_batch_id == str(active_batch_id))
 
     result = await db.execute(stmt)
     entries = result.scalars().all()
 
     if not entries and active_batch_id:
-        fallback_stmt = select(JournalEntry).where(JournalEntry.organization_id == org_uuid)
+        fallback_stmt = select(JournalEntry).where(JournalEntry.organization_id == str(org_uuid))
         result = await db.execute(fallback_stmt)
         entries = result.scalars().all()
 

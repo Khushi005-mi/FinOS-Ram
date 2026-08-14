@@ -1,7 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Boolean, DateTime, Integer, String, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, DateTime, Integer, String, UUID, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -10,11 +9,10 @@ from app.db.base import Base
 class Organization(Base):
     """
     Represents a tenant organization (SME company) in FinOS.
-    Enforces multi-tenant workspace metadata and configuration settings.
+    Dual-compatible with PostgreSQL (Supabase) and SQLite (Local).
     """
     __tablename__ = "organizations"
 
-    # Primary Key (Native PostgreSQL UUID)
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
@@ -22,15 +20,13 @@ class Organization(Base):
         nullable=False,
     )
 
-    # Core Business Metadata
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     industry_type: Mapped[str] = mapped_column(String(50), default="GENERAL_SMB", nullable=False)
     currency: Mapped[str] = mapped_column(String(10), default="INR", nullable=False)
-    fiscal_year_start: Mapped[int] = mapped_column(Integer, default=4, nullable=False)  # 4 = April
+    fiscal_year_start: Mapped[int] = mapped_column(Integer, default=4, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    # Audit Timestamps (Server-side generated)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

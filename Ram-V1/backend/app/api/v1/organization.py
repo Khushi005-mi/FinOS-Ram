@@ -22,7 +22,11 @@ async def get_my_organization(
     db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(get_current_tenant_user),
 ):
-    organization_id = str(current_user.organization_id)
+    # Convert string ID to native Python uuid.UUID object for Postgres
+    try:
+        organization_id = uuid.UUID(current_user.organization_id)
+    except (ValueError, TypeError):
+        organization_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
     stmt = select(Organization).where(Organization.id == organization_id)
     result = await db.execute(stmt)
@@ -57,7 +61,10 @@ async def update_my_organization(
     db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(get_current_tenant_user),
 ):
-    organization_id = str(current_user.organization_id)
+    try:
+        organization_id = uuid.UUID(current_user.organization_id)
+    except (ValueError, TypeError):
+        organization_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
     stmt = select(Organization).where(Organization.id == organization_id)
     result = await db.execute(stmt)

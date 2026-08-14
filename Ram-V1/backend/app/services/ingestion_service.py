@@ -3,6 +3,7 @@ import uuid
 from decimal import Decimal
 from typing import Any, Dict, List
 from fastapi import UploadFile
+import pandas as pd
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.journal_entry import JournalEntry
@@ -10,6 +11,20 @@ from app.db.models.upload_batch import UploadBatch
 from app.engine.mapper import auto_map_columns, map_and_normalize_dataframe
 from app.engine.parser import FileParsingError, parse_file_stream
 from app.engine.validator import validate_ledger_dataframe
+
+
+def _safe_decimal(val: Any) -> Decimal:
+    """
+    Safely converts any numeric value, string, or NaN cell into an exact Decimal.
+    Prevents Decimal('nan') database crash errors on blank Excel/CSV cells.
+    """
+    try:
+        if pd.isna(val) or val is None or str(val).strip().lower() in ["nan", "none", "null", ""]:
+            return Decimal("0.0000")
+        clean_num = float(str(val).replace(",", "").replace("$", "").replace("₹", "").strip())
+        return Decimal(str(round(clean_num, 4)))
+    except Exception:
+        return Decimal("0.0000")
 
 
 class IngestionService:
@@ -53,56 +68,49 @@ class IngestionService:
                 column_mapping = file_meta.get("columnMapping", {})
                 source_type = file_meta.get("sourceType", "GENERAL_LEDGER")
 
-                # 1. Parse raw binary file stream in RAM
                 raw_df = parse_file_stream(file.filename, file_bytes)
 
-                # 2. Server-side Auto-Map fallback if columnMapping is empty
                 if not column_mapping:
                     column_mapping = auto_map_columns(list(raw_df.columns))
 
-                # 3. Normalize DataFrame columns to FinOS canonical schema
                 mapped_df = map_and_normalize_dataframe(raw_df, column_mapping)
                 mapped_df["source_type"] = source_type
 
                 all_parsed_dfs.append(mapped_df)
 
             if not all_parsed_dfs:
-                raise FileParsingError("No valid data extracted from uploaded files.")
+                raise FileParsingError("No valid tabular data extracted from uploaded files.")
 
-            import pandas as pd
             consolidated_df = pd.concat(all_parsed_dfs, ignore_index=True)
 
-            # 4. Perform Double-Entry Balance Audit
             validation_result = validate_ledger_dataframe(consolidated_df)
 
-            # 5. AUTO-BALANCE UNMATCHED SINGLE-ENTRY FILES
-            # If uploaded file is single-entry (e.g. only Revenue credits without Debit offsets),
-            # generate balancing offset entries automatically so no data is wasted!
+            # Auto-balance single-entry files if needed
             if not validation_result.is_balanced and validation_result.variance > 0:
                 diff = float(validation_result.variance)
+                first_date = consolidated_df["transaction_date"].iloc[0] if not consolidated_df.empty else "2024-01-01"
+
                 if validation_result.total_debit < validation_result.total_credit:
-                    # Need Debit offset
                     offset_row = pd.DataFrame([{
-                        "transaction_date": consolidated_df["transaction_date"].iloc[0],
+                        "transaction_date": first_date,
                         "account_code": "1010",
                         "account_name": "HDFC Bank Clearing Account",
                         "account_category": "ASSET",
                         "debit": diff,
                         "credit": 0.0,
-                        "description": "Auto-balanced clearing entry for uploaded batch",
+                        "description": "Auto-balanced clearing entry",
                         "reference_id": f"BATCH-{str(batch.id)[:6]}",
                         "source_type": "BANK_STATEMENT",
                     }])
                 else:
-                    # Need Credit offset
                     offset_row = pd.DataFrame([{
-                        "transaction_date": consolidated_df["transaction_date"].iloc[0],
+                        "transaction_date": first_date,
                         "account_code": "2010",
                         "account_name": "Accounts Payable Clearing Account",
                         "account_category": "LIABILITY",
                         "debit": 0.0,
                         "credit": diff,
-                        "description": "Auto-balanced clearing entry for uploaded batch",
+                        "description": "Auto-balanced clearing entry",
                         "reference_id": f"BATCH-{str(batch.id)[:6]}",
                         "source_type": "GENERAL_LEDGER",
                     }])
@@ -110,23 +118,22 @@ class IngestionService:
                 consolidated_df = pd.concat([consolidated_df, offset_row], ignore_index=True)
                 validation_result = validate_ledger_dataframe(consolidated_df)
 
-            # 6. Convert Mapped Rows into JournalEntry ORM Objects
+            # Convert DataFrame rows into JournalEntry ORM models using _safe_decimal()
             journal_entries: List[JournalEntry] = []
             for _, row in consolidated_df.iterrows():
                 entry = JournalEntry(
                     organization_id=str(organization_id),
-                    source_type=str(row["source_type"]),
-                    account_code=str(row["account_code"]) if row["account_code"] else None,
-                    account_name=str(row["account_name"]),
-                    account_category=str(row["account_category"]),
-                    debit=Decimal(str(round(row["debit"], 4))),
-                    credit=Decimal(str(round(row["credit"], 4))),
-                    transaction_date=row["transaction_date"],
-                    reference_id=str(row["reference_id"]) if row["reference_id"] else None,
+                    source_type=str(row.get("source_type", "GENERAL_LEDGER")),
+                    account_code=str(row.get("account_code")) if row.get("account_code") else None,
+                    account_name=str(row.get("account_name", "General Transaction")),
+                    account_category=str(row.get("account_category", "GENERAL_SMB")),
+                    debit=_safe_decimal(row.get("debit")),
+                    credit=_safe_decimal(row.get("credit")),
+                    transaction_date=row.get("transaction_date", "2024-01-01"),
+                    reference_id=str(row.get("reference_id")) if row.get("reference_id") else None,
                 )
                 journal_entries.append(entry)
 
-            # 7. Bulk Insert into Database & Update Batch Status
             db.add_all(journal_entries)
             batch.status = "PROCESSED"
             batch.total_records_ingested = len(journal_entries)

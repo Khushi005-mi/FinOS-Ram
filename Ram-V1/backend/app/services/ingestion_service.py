@@ -4,9 +4,11 @@ from decimal import Decimal
 from typing import Any, Dict, List
 from fastapi import UploadFile
 import pandas as pd
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.journal_entry import JournalEntry
+from app.db.models.organization import Organization
 from app.db.models.upload_batch import UploadBatch
 from app.engine.mapper import auto_map_columns, map_and_normalize_dataframe
 from app.engine.parser import FileParsingError, parse_file_stream
@@ -14,10 +16,6 @@ from app.engine.validator import validate_ledger_dataframe
 
 
 def _safe_decimal(val: Any) -> Decimal:
-    """
-    Safely converts any numeric value, string, or NaN cell into an exact Decimal.
-    Prevents Decimal('nan') database crash errors on blank Excel/CSV cells.
-    """
     try:
         if pd.isna(val) or val is None or str(val).strip().lower() in ["nan", "none", "null", ""]:
             return Decimal("0.0000")
@@ -28,12 +26,6 @@ def _safe_decimal(val: Any) -> Decimal:
 
 
 class IngestionService:
-    """
-    Service Layer orchestrator for multi-file batch ingestion.
-    Coordinates file parsing, canonical schema mapping, balance validation,
-    auto-balancing offsets, and atomic database persistence.
-    """
-
     @staticmethod
     async def process_batch(
         db: AsyncSession,
@@ -46,6 +38,7 @@ class IngestionService:
         except Exception:
             metadata_list = []
 
+        # 1. Create UploadBatch audit record
         batch = UploadBatch(
             organization_id=str(organization_id),
             status="PARSING",
@@ -79,10 +72,11 @@ class IngestionService:
                 all_parsed_dfs.append(mapped_df)
 
             if not all_parsed_dfs:
-                raise FileParsingError("No valid tabular data extracted from uploaded files.")
+                raise FileParsingError("No valid data extracted from uploaded files.")
 
             consolidated_df = pd.concat(all_parsed_dfs, ignore_index=True)
 
+            # 2. Perform Double-Entry Balance Audit Gate
             validation_result = validate_ledger_dataframe(consolidated_df)
 
             # Auto-balance single-entry files if needed
@@ -118,7 +112,7 @@ class IngestionService:
                 consolidated_df = pd.concat([consolidated_df, offset_row], ignore_index=True)
                 validation_result = validate_ledger_dataframe(consolidated_df)
 
-            # Convert DataFrame rows into JournalEntry ORM models using _safe_decimal()
+            # 3. Convert DataFrame rows into JournalEntry ORM models
             journal_entries: List[JournalEntry] = []
             for _, row in consolidated_df.iterrows():
                 entry = JournalEntry(
@@ -130,13 +124,21 @@ class IngestionService:
                     debit=_safe_decimal(row.get("debit")),
                     credit=_safe_decimal(row.get("credit")),
                     transaction_date=row.get("transaction_date", "2024-01-01"),
-                    reference_id=str(row.get("reference_id")) if row.get("reference_id") else None,
+                    reference_id=f"BATCH-{str(batch.id)[:6]}", # Stamp batch ID prefix on reference_id
                 )
                 journal_entries.append(entry)
 
+            # 4. Bulk Insert Journal Entries
             db.add_all(journal_entries)
             batch.status = "PROCESSED"
             batch.total_records_ingested = len(journal_entries)
+
+            # 5. ACTIVATE THIS DATASET ON THE ORGANIZATION PROFILE!
+            org_stmt = select(Organization).where(Organization.id == organization_id)
+            org_res = await db.execute(org_stmt)
+            org = org_res.scalar_one_or_none()
+            if org:
+                org.active_batch_id = str(batch.id)
 
             await db.commit()
 

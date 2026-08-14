@@ -1,6 +1,8 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Boolean, DateTime, Integer, String, UUID, func
+from typing import Optional
+from sqlalchemy import Boolean, DateTime, Integer, String, func
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -8,8 +10,8 @@ from app.db.base import Base
 
 class Organization(Base):
     """
-    Represents a tenant organization (SME company) in FinOS.
-    Dual-compatible with PostgreSQL (Supabase) and SQLite (Local).
+    Represents a tenant organization in FinOS.
+    Stores workspace metadata, currency settings, and active dataset references.
     """
     __tablename__ = "organizations"
 
@@ -26,6 +28,9 @@ class Organization(Base):
     currency: Mapped[str] = mapped_column(String(10), default="INR", nullable=False)
     fiscal_year_start: Mapped[int] = mapped_column(Integer, default=4, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Active Dataset Tracking (Stores UUID of the currently selected upload batch)
+    active_batch_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -9,7 +9,6 @@ from app.services.ingestion_service import IngestionService
 
 router = APIRouter(prefix="/ingestion", tags=["Data Ingestion & Mapper"])
 
-
 @router.post(
     "/batch",
     status_code=status.HTTP_200_OK,
@@ -31,6 +30,14 @@ async def upload_financial_batch(
         organization_id = uuid.UUID(current_user.organization_id)
     except (ValueError, TypeError):
         organization_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+    # 📸 CAMERA 3: MOVED INSIDE THE FUNCTION
+    print("\n" + "="*50)
+    print("[FINOS TRACE 3] UPLOAD ENDPOINT RECEIVED")
+    print(f"number of files: {len(files)}")
+    print(f"filename: {files[0].filename}")
+    print(f"organization_id: {organization_id}")
+    print("="*50 + "\n")
 
     result = await IngestionService.process_batch(
         db=db,

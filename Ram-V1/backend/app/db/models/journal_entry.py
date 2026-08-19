@@ -5,7 +5,7 @@ from typing import Optional
 
 from sqlalchemy import Date, DateTime, ForeignKey, Index, Numeric, String, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
@@ -13,7 +13,7 @@ from app.db.base import Base
 class JournalEntry(Base):
     """
     Represents a normalized double-entry ledger transaction in FinOS.
-    Linked explicitly to an Organization and an UploadBatch.
+    Stores financial line items ingested across all data sources.
     """
     __tablename__ = "journal_entries"
 
@@ -34,11 +34,17 @@ class JournalEntry(Base):
     )
 
     # Explicit Upload Batch Foreign Key
-    upload_batch_id: Mapped[Optional[str]] = mapped_column(
-        String(36),
+    upload_batch_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
         ForeignKey("upload_batches.id", ondelete="CASCADE"),
         index=True,
         nullable=True,
+    )
+
+    # Bi-directional ORM Relationship to UploadBatch
+    upload_batch: Mapped[Optional["UploadBatch"]] = relationship(
+        "UploadBatch",
+        back_populates="journal_entries",
     )
 
     # Ingestion Source & Account Classification

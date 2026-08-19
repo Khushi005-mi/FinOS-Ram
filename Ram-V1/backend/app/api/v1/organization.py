@@ -22,20 +22,22 @@ async def get_my_organization(
     db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(get_current_tenant_user),
 ):
-    # Convert string ID to native Python uuid.UUID object for Postgres
+    raw_id = current_user.organization_id
     try:
-        organization_id = uuid.UUID(current_user.organization_id)
+        org_uuid = uuid.UUID(raw_id)
     except (ValueError, TypeError):
-        organization_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+        org_uuid = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
-    stmt = select(Organization).where(Organization.id == organization_id)
+    # Match both native UUID and string UUID representations for cross-DB compatibility
+    stmt = select(Organization).where(
+        (Organization.id == org_uuid) | (Organization.id == str(org_uuid))
+    )
     result = await db.execute(stmt)
     org = result.scalar_one_or_none()
 
     if not org:
-        # Create default organization if not found
         org = Organization(
-            id=organization_id,
+            id=org_uuid,
             name="Apex Manufacturing Ltd.",
             slug="apex-manufacturing",
             industry_type="MANUFACTURING",
@@ -61,12 +63,15 @@ async def update_my_organization(
     db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(get_current_tenant_user),
 ):
+    raw_id = current_user.organization_id
     try:
-        organization_id = uuid.UUID(current_user.organization_id)
+        org_uuid = uuid.UUID(raw_id)
     except (ValueError, TypeError):
-        organization_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+        org_uuid = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
-    stmt = select(Organization).where(Organization.id == organization_id)
+    stmt = select(Organization).where(
+        (Organization.id == org_uuid) | (Organization.id == str(org_uuid))
+    )
     result = await db.execute(stmt)
     org = result.scalar_one_or_none()
 

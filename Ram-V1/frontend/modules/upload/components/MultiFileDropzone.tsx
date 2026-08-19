@@ -1,112 +1,73 @@
 "use client";
 
-import React, { useState, DragEvent, ChangeEvent } from "react";
-import { useUploadStore } from "../store/uploadStore";
-import { FileList } from "./FileList";
-import { Button } from "@/components/ui";
+import React, { useRef, useState } from "react";
 
-export function MultiFileDropzone() {
-  const [isDragging, setIsDragging] = useState<boolean>(false);
-  const { files, addFiles, setStep } = useUploadStore();
+export interface MultiFileDropzoneProps {
+  onFileSelect?: (file: File) => void;
+}
 
-  // 1. Intercept Drag Over Event
-  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
+// 1️⃣ NAMED EXPORT
+export function MultiFileDropzone({ onFileSelect }: MultiFileDropzoneProps) {
+  const [dragOver, setDragOver] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // 2. Intercept Drag Leave Event
-  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
-  // 3. Handle File Drop Event
-  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragging(false);
-
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const validFiles = Array.from(e.dataTransfer.files).filter(
-        (file) =>
-          file.name.endsWith(".xlsx") ||
-          file.name.endsWith(".xls") ||
-          file.name.endsWith(".csv")
-      );
-
-      if (validFiles.length > 0) {
-        addFiles(validFiles);
+  const handleFiles = (files: FileList | null) => {
+    if (files && files.length > 0) {
+      const selected = files[0];
+      setFileName(selected.name);
+      if (onFileSelect) {
+        onFileSelect(selected);
       }
     }
   };
 
-  // 4. Handle File Input Browse Click
-  const handleFileInput = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const validFiles = Array.from(e.target.files);
-      addFiles(validFiles);
-    }
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    handleFiles(e.dataTransfer.files);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setDragOver(false);
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-6">
-      {/* Drag & Drop Visual Zone */}
-      <div
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-2xl p-10 text-center transition-all duration-200 cursor-pointer ${
-          isDragging
-            ? "border-indigo-500 bg-indigo-500/10 scale-[1.01]"
-            : "border-white/15 bg-zinc-900/60 hover:border-white/30"
-        }`}
-      >
-        <input
-          type="file"
-          id="file-upload-input"
-          multiple
-          accept=".xlsx,.xls,.csv"
-          className="hidden"
-          onChange={handleFileInput}
-        />
+    <div
+      onClick={() => inputRef.current?.click()}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 text-center transition-colors ${
+        dragOver ? "border-blue-500 bg-blue-50" : "border-gray-300 bg-gray-50 hover:bg-gray-100"
+      }`}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".csv,.xlsx,.xls"
+        className="hidden"
+        onChange={(e) => handleFiles(e.target.files)}
+      />
 
-        <label htmlFor="file-upload-input" className="cursor-pointer space-y-3 block">
-          <div className="w-16 h-16 mx-auto rounded-2xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center font-bold text-2xl">
-            📁
-          </div>
-
+      <div className="text-gray-600">
+        {fileName ? (
+          <p className="font-semibold text-blue-600">Selected: {fileName}</p>
+        ) : (
           <div>
-            <p className="text-base font-semibold text-white">
-              Drag & drop your financial files here
-            </p>
-            <p className="text-xs text-zinc-400 mt-1">
-              Upload 1 or multiple Excel (.xlsx, .xls) or CSV files simultaneously
-            </p>
+            <p className="text-sm font-medium">Drag & drop your CSV file here, or click to browse</p>
+            <p className="mt-1 text-xs text-gray-500">Supports .csv, .xlsx</p>
           </div>
-
-          <div className="pt-2">
-            <span className="inline-flex items-center px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold shadow-lg shadow-indigo-500/20 hover:bg-indigo-500 transition-colors">
-              Browse Files
-            </span>
-          </div>
-        </label>
+        )}
       </div>
-
-      {/* List of Attached Files & Source Type Dropdowns */}
-      <FileList />
-
-      {/* Wizard Next Step Action Button */}
-      {files.length > 0 && (
-        <div className="flex justify-end pt-4">
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={() => setStep(2)}
-          >
-            Next: Map Columns & Auto-Detect ({files.length} {files.length === 1 ? "File" : "Files"}) →
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
+
+// 2️⃣ DEFAULT EXPORT at the bottom
+export default MultiFileDropzone;

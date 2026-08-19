@@ -15,14 +15,17 @@ router = APIRouter(prefix="/reports", tags=["Financial Reports"])
     response_model=FinancialStatementResponse,
     status_code=status.HTTP_200_OK,
     summary="Get Income Statement (P&L)",
+    description="Generates a structured Income Statement report for the active tenant organization.",
 )
 async def get_income_statement(
     period_name: str = Query(default="Q1 2024 (Jan - Mar)"),
     db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(get_current_tenant_user),
 ):
-    # Use string UUID matching for SQLite/Postgres compatibility
-    organization_id = str(current_user.organization_id)
+    try:
+        organization_id = uuid.UUID(current_user.organization_id)
+    except (ValueError, TypeError):
+        organization_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
     return await ReportsService.generate_income_statement(
         db=db,

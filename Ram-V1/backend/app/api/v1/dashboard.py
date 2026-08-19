@@ -1,5 +1,6 @@
 import uuid
 from typing import Any, Dict, List
+
 from fastapi import APIRouter, Depends, status
 import pandas as pd
 from sqlalchemy import select
@@ -23,20 +24,17 @@ async def get_dashboard_metrics(
     db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(get_current_tenant_user),
 ) -> Dict[str, Any]:
-    try:
-        org_uuid = uuid.UUID(current_user.organization_id)
-    except (ValueError, TypeError):
-        org_uuid = uuid.UUID("00000000-0000-0000-0000-000000000001")
+    organization_id = str(current_user.organization_id)
 
-    # 1. Fetch Tenant Profile & Active Batch ID
-    org_stmt = select(Organization).where(Organization.id == org_uuid)
+    # 1. Fetch Tenant Profile & Active Batch ID safely
+    org_stmt = select(Organization).where(Organization.id == organization_id)
     org_result = await db.execute(org_stmt)
     org = org_result.scalar_one_or_none()
     currency_code = getattr(org, "currency", "INR") if org else "INR"
     active_batch_id = getattr(org, "active_batch_id", None) if org else None
 
-    # 2. Query Journal Entries ISOLATED TO ACTIVE BATCH!
-    stmt = select(JournalEntry).where(JournalEntry.organization_id == str(org_uuid))
+    # 2. Query Journal Entries (Isolate to active_batch_id if present)
+    stmt = select(JournalEntry).where(JournalEntry.organization_id == organization_id)
 
     if active_batch_id:
         stmt = stmt.where(JournalEntry.upload_batch_id == str(active_batch_id))
@@ -46,7 +44,7 @@ async def get_dashboard_metrics(
 
     # Fallback to all tenant entries if no active batch filter match
     if not entries and active_batch_id:
-        fallback_stmt = select(JournalEntry).where(JournalEntry.organization_id == str(org_uuid))
+        fallback_stmt = select(JournalEntry).where(JournalEntry.organization_id == organization_id)
         result = await db.execute(fallback_stmt)
         entries = result.scalars().all()
 
@@ -67,7 +65,18 @@ async def get_dashboard_metrics(
             ]
         )
 
-    return compute_executive_metrics(df, currency_code=currency_code)
+    # 4. Compute and Return Metrics
+    metrics = compute_executive_metrics(df, currency_code=currency_code)
+
+    # 📸 CAMERA 4: DASHBOARD METRICS API
+    print("\n" + "="*50)
+    print("[FINOS TRACE 4] DASHBOARD METRICS API")
+    print(f"Active Batch ID: {active_batch_id}")
+    print(f"Number of DB entries found: {len(entries)}")
+    print(f"Metrics Output: {metrics}")
+    print("="*50 + "\n")
+
+    return metrics
 
 
 @router.get(
@@ -79,17 +88,14 @@ async def get_monthly_trends_data(
     db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(get_current_tenant_user),
 ) -> List[Dict[str, Any]]:
-    try:
-        org_uuid = uuid.UUID(current_user.organization_id)
-    except (ValueError, TypeError):
-        org_uuid = uuid.UUID("00000000-0000-0000-0000-000000000001")
+    organization_id = str(current_user.organization_id)
 
-    org_stmt = select(Organization).where(Organization.id == org_uuid)
+    org_stmt = select(Organization).where(Organization.id == organization_id)
     org_result = await db.execute(org_stmt)
     org = org_result.scalar_one_or_none()
     active_batch_id = getattr(org, "active_batch_id", None) if org else None
 
-    stmt = select(JournalEntry).where(JournalEntry.organization_id == str(org_uuid))
+    stmt = select(JournalEntry).where(JournalEntry.organization_id == organization_id)
     if active_batch_id:
         stmt = stmt.where(JournalEntry.upload_batch_id == str(active_batch_id))
 
@@ -97,7 +103,7 @@ async def get_monthly_trends_data(
     entries = result.scalars().all()
 
     if not entries and active_batch_id:
-        fallback_stmt = select(JournalEntry).where(JournalEntry.organization_id == str(org_uuid))
+        fallback_stmt = select(JournalEntry).where(JournalEntry.organization_id == organization_id)
         result = await db.execute(fallback_stmt)
         entries = result.scalars().all()
 

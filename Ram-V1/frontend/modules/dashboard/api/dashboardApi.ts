@@ -12,8 +12,20 @@ export const dashboardApi = {
    * Fetches real summary financial metrics for active_batch_id from FastAPI backend.
    */
   async getMetrics(): Promise<DashboardMetrics> {
-    const response = await apiClient.get<DashboardMetrics>(API_ROUTES.DASHBOARD.METRICS);
-    return response.data;
+    try {
+      const response = await apiClient.get<DashboardMetrics>(API_ROUTES.DASHBOARD.METRICS);
+      
+      // 📸 CAMERA 5: WHAT DOES THE FRONTEND RECEIVE?
+      console.log("\n[FINOS TRACE 5] DASHBOARD API SUCCESS");
+      console.log("Real Data from Backend:", response.data);
+      
+      return response.data;
+    } catch (error) {
+      // 📸 CAMERA 6: IS THE FRONTEND FAKING AN ERROR?
+      console.error("\n[FINOS TRACE 6] DASHBOARD API FAILED!");
+      console.error("Error details:", error);
+      throw error;
+    }
   },
 
   /**

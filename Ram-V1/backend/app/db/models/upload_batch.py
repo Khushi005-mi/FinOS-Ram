@@ -4,7 +4,7 @@ from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
@@ -69,4 +69,10 @@ class UploadBatch(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+    # Bi-directional ORM Relationship to JournalEntry
+    journal_entries: Mapped[list["JournalEntry"]] = relationship(
+        "JournalEntry",
+        back_populates="upload_batch",
     )

@@ -1,65 +1,46 @@
+// app/(dashboard)/upload/page.tsx
 "use client";
 
-import React from "react";
-import { useUploadStore } from "@/modules/upload/store/uploadStore";
+import React, { useState } from "react";
 import { MultiFileDropzone } from "@/modules/upload/components/MultiFileDropzone";
 import { ColumnMapper } from "@/modules/upload/components/ColumnMapper";
 import { ValidationPreview } from "@/modules/upload/components/ValidationPreview";
 
 export default function UploadPage() {
-  const { currentStep } = useUploadStore();
+  const [file, setFile] = useState<File | null>(null);
+  const [step, setStep] = useState<number>(1);
 
   return (
-    <div className="py-8 px-4 max-w-6xl mx-auto space-y-8">
-      {/* Header Banner */}
-      <div className="text-center max-w-2xl mx-auto space-y-2">
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-          Financial Multi-Source Data Ingestion
-        </h1>
-        <p className="text-slate-500 text-sm">
-          Upload and reconcile General Ledgers, Bank Statements, Raw Material Invoices, and Payroll sheets into FinOS.
+    <div className="mx-auto max-w-5xl space-y-8 p-8">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900">Upload Financial Ledger</h1>
+        <p className="text-sm text-gray-500">
+          Upload your CSV/Excel transactions to update the active dashboard dataset.
         </p>
       </div>
 
-      {/* Step Indicator Wizard Bar */}
-      <div className="flex items-center justify-center space-x-4 max-w-xl mx-auto">
-        <div className={`flex items-center space-x-2 text-sm font-semibold ${
-          currentStep >= 1 ? "text-indigo-600" : "text-slate-400"
-        }`}>
-          <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs text-white ${
-            currentStep >= 1 ? "bg-indigo-600" : "bg-slate-300"
-          }`}>1</span>
-          <span>Upload Files</span>
+      <div className="rounded-lg border bg-white p-6 shadow-sm space-y-6">
+        {/* Step 1: Dropzone */}
+        <div>
+          <h2 className="text-lg font-semibold mb-2">1. Select File</h2>
+          <MultiFileDropzone onFileSelect={(selectedFile) => setFile(selectedFile)} />
         </div>
 
-        <div className="w-12 h-0.5 bg-slate-200" />
+        {/* Step 2: Preview (Only shown when file is selected) */}
+        {file && (
+          <div>
+            <h2 className="text-lg font-semibold mb-2">2. Data Preview</h2>
+            <ValidationPreview file={file} />
+          </div>
+        )}
 
-        <div className={`flex items-center space-x-2 text-sm font-semibold ${
-          currentStep >= 2 ? "text-indigo-600" : "text-slate-400"
-        }`}>
-          <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs text-white ${
-            currentStep >= 2 ? "bg-indigo-600" : "bg-slate-300"
-          }`}>2</span>
-          <span>Map Columns</span>
-        </div>
-
-        <div className="w-12 h-0.5 bg-slate-200" />
-
-        <div className={`flex items-center space-x-2 text-sm font-semibold ${
-          currentStep >= 3 ? "text-indigo-600" : "text-slate-400"
-        }`}>
-          <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs text-white ${
-            currentStep >= 3 ? "bg-indigo-600" : "bg-slate-300"
-          }`}>3</span>
-          <span>Validate & Save</span>
-        </div>
-      </div>
-
-      {/* Dynamic Wizard Step Content */}
-      <div className="pt-4">
-        {currentStep === 1 && <MultiFileDropzone />}
-        {currentStep === 2 && <ColumnMapper />}
-        {currentStep === 3 && <ValidationPreview />}
+        {/* Step 3: Column Mapping & Ingest Button */}
+        {file && (
+          <div>
+            <h2 className="text-lg font-semibold mb-2">3. Confirm & Submit</h2>
+            <ColumnMapper file={file} />
+          </div>
+        )}
       </div>
     </div>
   );

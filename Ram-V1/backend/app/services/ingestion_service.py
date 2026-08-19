@@ -1,11 +1,12 @@
 import json
+from datetime import date
 import uuid
 from decimal import Decimal
 from typing import Any, Dict, List
 from fastapi import UploadFile
 import pandas as pd
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession  # Added missing import
 
 from app.db.models.journal_entry import JournalEntry
 from app.db.models.organization import Organization
@@ -16,6 +17,10 @@ from app.engine.validator import validate_ledger_dataframe
 
 
 def _safe_decimal(val: Any) -> Decimal:
+    """
+    Safely converts any numeric value, string, or NaN cell into an exact Decimal.
+    Prevents Decimal('nan') database crash errors on blank Excel/CSV cells.
+    """
     try:
         if pd.isna(val) or val is None or str(val).strip().lower() in ["nan", "none", "null", ""]:
             return Decimal("0.0000")
@@ -26,6 +31,12 @@ def _safe_decimal(val: Any) -> Decimal:
 
 
 class IngestionService:
+    """
+    Service Layer orchestrator for multi-file batch ingestion.
+    Coordinates file parsing, canonical schema mapping, balance validation,
+    auto-balancing offsets, and atomic database persistence.
+    """
+
     @staticmethod
     async def process_batch(
         db: AsyncSession,
@@ -52,6 +63,7 @@ class IngestionService:
         all_parsed_dfs = []
 
         try:
+            # 2. Parse uploaded files in RAM
             for file in files:
                 file_bytes = await file.read()
                 file_meta = next(
@@ -72,16 +84,21 @@ class IngestionService:
                 all_parsed_dfs.append(mapped_df)
 
             if not all_parsed_dfs:
-                raise FileParsingError("No valid data extracted from uploaded files.")
+                raise FileParsingError("No valid tabular data extracted from uploaded files.")
 
             consolidated_df = pd.concat(all_parsed_dfs, ignore_index=True)
 
-            # 2. Perform Double-Entry Balance Audit Gate
+            # 3. Validate Debit = Credit Balance
             validation_result = validate_ledger_dataframe(consolidated_df)
 
+            # Auto-balance single-entry files if needed
             if not validation_result.is_balanced and validation_result.variance > 0:
                 diff = float(validation_result.variance)
-                first_date = consolidated_df["transaction_date"].iloc[0] if not consolidated_df.empty else "2024-01-01"
+                first_date = (
+                    consolidated_df["transaction_date"].iloc[0]
+                    if not consolidated_df.empty and "transaction_date" in consolidated_df.columns
+                    else date.today()
+                )
 
                 if validation_result.total_debit < validation_result.total_credit:
                     offset_row = pd.DataFrame([{
@@ -111,30 +128,30 @@ class IngestionService:
                 consolidated_df = pd.concat([consolidated_df, offset_row], ignore_index=True)
                 validation_result = validate_ledger_dataframe(consolidated_df)
 
-            # 3. Convert DataFrame rows into JournalEntry ORM models WITH EXPLICIT upload_batch_id FK!
+            # 4. Convert DataFrame rows into JournalEntry ORM models
             journal_entries: List[JournalEntry] = []
             for _, row in consolidated_df.iterrows():
                 entry = JournalEntry(
                     organization_id=str(organization_id),
-                    upload_batch_id=str(batch.id),  # EXPLICIT FK LINK TO BATCH
+                    upload_batch_id=str(batch.id),
                     source_type=str(row.get("source_type", "GENERAL_LEDGER")),
                     account_code=str(row.get("account_code")) if row.get("account_code") else None,
-                    account_name=str(row.get("account_name", "General Transaction")),
+                    account_name=str(row.get("account_name", "General Ingested Transaction")),
                     account_category=str(row.get("account_category", "GENERAL_SMB")),
                     debit=_safe_decimal(row.get("debit")),
                     credit=_safe_decimal(row.get("credit")),
-                    transaction_date=row.get("transaction_date", "2024-01-01"),
-                    reference_id=str(row.get("reference_id")) if row.get("reference_id") else None,
+                    transaction_date=row.get("transaction_date") or date.today(),
+                    reference_id=f"BATCH-{str(batch.id)[:6]}",
                 )
                 journal_entries.append(entry)
 
-            # 4. Bulk Insert Journal Entries & Update Batch
+            # 5. Bulk Insert into Database & Commit Transaction
             db.add_all(journal_entries)
             batch.status = "PROCESSED"
             batch.total_records_ingested = len(journal_entries)
 
-            # 5. MARK THIS BATCH AS THE ACTIVE DATASET FOR THE ORGANIZATION!
-            org_stmt = select(Organization).where(Organization.id == organization_id)
+            # Mark this upload batch as the active dataset for the company
+            org_stmt = select(Organization).where(Organization.id == str(organization_id))
             org_res = await db.execute(org_stmt)
             org = org_res.scalar_one_or_none()
             if org:
@@ -155,7 +172,7 @@ class IngestionService:
         except Exception as err:
             await db.rollback()
             batch.status = "FAILED"
-            batch.error_message = str(err)
+            batch.error_message = str(err)[:1000]
             await db.commit()
             return {
                 "batch_id": str(batch.id),

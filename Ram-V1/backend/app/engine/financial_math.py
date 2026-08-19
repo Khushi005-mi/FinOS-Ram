@@ -12,8 +12,8 @@ CURRENCY_SYMBOLS = {
 
 def compute_executive_metrics(df: pd.DataFrame, currency_code: str = "INR") -> Dict[str, Any]:
     """
-    Calculates dynamic executive KPI cards (Revenue, COGS, Gross Margin %, EBITDA)
-    directly from database journal entries and formats values in the tenant's active currency.
+    Calculates dynamic executive KPI cards directly from database journal entries.
+    No hardcoded fake percentages. Pure verifiable math.
     """
     symbol = CURRENCY_SYMBOLS.get(currency_code.upper(), "₹")
 
@@ -48,37 +48,37 @@ def compute_executive_metrics(df: pd.DataFrame, currency_code: str = "INR") -> D
         round((total_cogs / total_revenue) * 100.0, 1) if total_revenue > 0 else 0.0
     )
 
-    # 4. Format Output Payload Matching Frontend Schema
+    # 4. Format Output Payload Matching Frontend Schema (Zero Fake Data)
     return {
         "revenue": {
             "title": "Total Revenue",
             "value": f"{symbol}{total_revenue:,.0f}",
-            "changePercentage": 12.4,
-            "trend": "up",
+            "changePercentage": 0.0,
+            "trend": "neutral",
             "isPositive": True,
-            "description": "vs. previous fiscal period",
+            "description": "Baseline established",
         },
         "cogs": {
             "title": "Cost of Goods / Sales",
             "value": f"{symbol}{total_cogs:,.0f}",
-            "changePercentage": 4.1,
-            "trend": "up",
+            "changePercentage": 0.0,
+            "trend": "neutral",
             "isPositive": False,
             "description": f"{cogs_pct}% of total revenue",
         },
         "grossMargin": {
             "title": "Gross Margin %",
             "value": f"{gross_margin_pct:.1f}%",
-            "changePercentage": 2.1,
-            "trend": "up",
+            "changePercentage": 0.0,
+            "trend": "neutral",
             "isPositive": gross_margin_pct >= 40.0,
             "description": "Target: 40.0% benchmark",
         },
         "ebitda": {
             "title": "Operating EBITDA",
             "value": f"{symbol}{ebitda:,.0f}",
-            "changePercentage": 8.7,
-            "trend": "up",
+            "changePercentage": 0.0,
+            "trend": "neutral",
             "isPositive": ebitda > 0,
             "description": f"{ebitda_margin_pct}% operating margin",
         },
@@ -91,9 +91,6 @@ def compute_executive_metrics(df: pd.DataFrame, currency_code: str = "INR") -> D
 
 
 def compute_monthly_trends(df: pd.DataFrame) -> List[Dict[str, Any]]:
-    """
-    Groups transactions by month and calculates monthly Revenue, COGS, and Gross Profit trends.
-    """
     if df.empty:
         return []
 

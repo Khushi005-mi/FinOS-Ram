@@ -31,16 +31,38 @@ const INDUSTRY_TITLES: Record<string, { title: string; subtitle: string }> = {
 
 export function UniversalCostBreakdownWidget({ data, currency = "INR" }: UniversalCostBreakdownWidgetProps) {
   const industryType: IndustryType = data?.industryType || data?.industry_type || "MANUFACTURING";
-  const totalCost = Number(data?.totalCost ?? data?.total_cost ?? 1800000);
-  const rawBuckets = data?.buckets || [];
+  const totalCost = Number(data?.totalCost ?? data?.total_cost ?? data?.total_cogs ?? 0);
 
-  const defaultBuckets = [
-    { label: "Direct Raw Materials", amount: 1040000, percentage: "57.8", color: "bg-indigo-600" },
-    { label: "Direct Labor / Payroll", amount: 520000, percentage: "28.9", color: "bg-emerald-500" },
-    { label: "Overhead & Facilities", amount: 240000, percentage: "13.3", color: "bg-amber-500" },
-  ];
+  // Map the backend's real field names (direct_materials, direct_labor,
+  // factory_overhead) into the {label, amount, percentage, color} shape
+  // this component renders. Falls back to an explicit "buckets" array
+  // if the backend ever sends one directly.
+  const rawBuckets = data?.buckets && data.buckets.length > 0
+    ? data.buckets
+    : (data?.total_cogs !== undefined
+        ? [
+            {
+              label: "Direct Raw Materials",
+              amount: data?.direct_materials ?? 0,
+              percentage: data?.direct_materials_pct ?? 0,
+              color: "bg-indigo-600",
+            },
+            {
+              label: "Direct Labor / Payroll",
+              amount: data?.direct_labor ?? 0,
+              percentage: data?.direct_labor_pct ?? 0,
+              color: "bg-emerald-500",
+            },
+            {
+              label: "Overhead & Facilities",
+              amount: data?.factory_overhead ?? 0,
+              percentage: data?.factory_overhead_pct ?? 0,
+              color: "bg-amber-500",
+            },
+          ]
+        : []);
 
-  const buckets = rawBuckets.length > 0 ? rawBuckets : defaultBuckets;
+  const buckets = rawBuckets;
   const { title, subtitle } = INDUSTRY_TITLES[industryType] || INDUSTRY_TITLES.GENERAL_SMB;
 
   return (

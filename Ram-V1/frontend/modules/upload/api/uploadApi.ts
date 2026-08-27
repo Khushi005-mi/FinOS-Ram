@@ -6,12 +6,7 @@ export const submitBatch = async (files: File[], organizationId?: string) => {
     files.forEach((file) => formData.append("files", file));
     formData.append("metadata", "[]");
 
-    const response = await apiClient.post("/ingestion/batch", formData, {
-      headers: {
-        "Content-Type": undefined,
-      },
-    });
-
+    const response = await apiClient.post("/ingestion/batch", formData);
     return response.data;
   } catch (error: any) {
     console.error("[FINOS ERROR] Upload Failed:", error);

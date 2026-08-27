@@ -1,47 +1,50 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { User, Session } from "@supabase/supabase-js";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 interface AuthContextType {
-  user: User | null;
-  session: Session | null;
+  user: any | null;
+  session: any | null;
   isLoading: boolean;
-  logout: () => Promise<void>;
+  signOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  session: null,
+  isLoading: true,
+  signOut: async () => {},
+});
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+export const useAuth = () => useContext(AuthContext);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<any | null>(null);
+  const [session, setSession] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    // 1. Get initial session from Supabase on app boot
-    const initializeAuth = async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        setSession(data.session);
-        setUser(data.session?.user ?? null);
+    if (!supabase || !supabase.auth) {
+      setIsLoading(false);
+      return;
+    }
 
-        // Store JWT token for Axios requests to FastAPI
-        if (data.session?.access_token) {
-          localStorage.setItem("finos_auth_token", data.session.access_token);
-        }
-      } catch (error) {
-        console.error("Error fetching session:", error);
-      } finally {
-        setIsLoading(false);
+    // 1. Get initial active session
+    supabase.auth.getSession().then(({ data: { session: currentSession } }: any) => {
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+      if (currentSession?.access_token) {
+        localStorage.setItem("finos_auth_token", currentSession.access_token);
       }
-    };
+      setIsLoading(false);
+    }).catch(() => {
+      setIsLoading(false);
+    });
 
-    initializeAuth();
-
-    // 2. Listen for auth state changes (LOGIN, LOGOUT, TOKEN_REFRESHED)
+    // 2. Listen for auth state changes with explicit types
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      (event, currentSession) => {
+      (event: any, currentSession: any) => {
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
 
@@ -55,34 +58,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    // Cleanup event listener when component unmounts
     return () => {
-      authListener.subscription.unsubscribe();
+      authListener?.subscription?.unsubscribe();
     };
   }, []);
 
-  const logout = async () => {
-    setIsLoading(true);
-    await supabase.auth.signOut();
+  const signOut = async () => {
+    if (supabase?.auth) {
+      await supabase.auth.signOut();
+    }
     localStorage.removeItem("finos_auth_token");
     setUser(null);
     setSession(null);
-    setIsLoading(false);
-    window.location.href = "/login";
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, isLoading, logout }}>
+    <AuthContext.Provider value={{ user, session, isLoading, signOut }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-// Custom Hook to consume Auth Context in any component
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
-};
+export default AuthProvider;

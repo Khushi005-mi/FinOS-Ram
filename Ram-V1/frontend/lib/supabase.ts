@@ -1,11 +1,14 @@
 import { createClient } from "@supabase/supabase-js";
 import { env } from "@/config/env";
 
-const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-const supabaseAnonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
+const isConfigured = Boolean(
+  env.NEXT_PUBLIC_SUPABASE_URL &&
+  env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
+  env.NEXT_PUBLIC_SUPABASE_URL.startsWith("http")
+);
 
-/**
- * Singleton Supabase JS Client for browser-side authentication
- * and file uploads to Supabase Storage.
- */
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = isConfigured
+  ? createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  : (null as any);
+
+export default supabase;

@@ -2,7 +2,7 @@
 backend/app/services/dashboard_service.py
 
 Service Layer orchestrator for executive financial analytics.
-Guarantees strict active dataset scoping with zero historical cross-batch leakage.
+Guarantees strict active dataset scoping with UUID type safety.
 """
 import uuid
 from typing import Any, Dict, List
@@ -18,11 +18,20 @@ from app.engine.financial_math import (
 )
 
 
+def _to_uuid(val: Any) -> uuid.UUID:
+    if isinstance(val, uuid.UUID):
+        return val
+    try:
+        return uuid.UUID(str(val))
+    except Exception:
+        return uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+
 class DashboardService:
     @staticmethod
     async def get_active_batch_dataframe(
         db: AsyncSession,
-        organization_id: str,
+        organization_id: Any,
     ) -> pd.DataFrame:
         canonical_columns = [
             "account_category",
@@ -34,20 +43,24 @@ class DashboardService:
             "description",
         ]
 
+        org_uuid = _to_uuid(organization_id)
+
         # 1. Fetch organization to get the active batch pointer
-        org_stmt = select(Organization).where(Organization.id == str(organization_id))
+        org_stmt = select(Organization).where(Organization.id == org_uuid)
         org_result = await db.execute(org_stmt)
         org = org_result.scalar_one_or_none()
 
         if not org or not org.active_batch_id:
             return pd.DataFrame(columns=canonical_columns)
 
-        # 2. Query entries strictly matching active_batch_id
+        batch_uuid = _to_uuid(org.active_batch_id)
+
+        # 2. Query entries strictly matching active_batch_id as UUID
         entry_stmt = (
             select(JournalEntry)
             .where(
-                JournalEntry.organization_id == str(organization_id),
-                JournalEntry.upload_batch_id == str(org.active_batch_id),
+                JournalEntry.organization_id == org_uuid,
+                JournalEntry.upload_batch_id == batch_uuid,
             )
         )
         entry_result = await db.execute(entry_stmt)
@@ -75,9 +88,8 @@ class DashboardService:
     async def get_cogs_breakdown(
         cls,
         db: AsyncSession,
-        organization_id: str,
+        organization_id: Any,
     ) -> Dict[str, Any]:
-        """Calculates COGS breakdown strictly for the active batch."""
         df = await cls.get_active_batch_dataframe(db, organization_id)
         return compute_cogs_breakdown(df)
 
@@ -85,8 +97,7 @@ class DashboardService:
     async def get_cfo_insights(
         cls,
         db: AsyncSession,
-        organization_id: str,
+        organization_id: Any,
     ) -> List[Dict[str, Any]]:
-        """Generates automated CFO insights strictly for the active batch."""
         df = await cls.get_active_batch_dataframe(db, organization_id)
         return generate_cfo_insights(df)

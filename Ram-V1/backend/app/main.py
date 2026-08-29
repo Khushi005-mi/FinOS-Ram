@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import uuid
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -14,22 +15,14 @@ import app.db.models  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Application Lifespan Event Handler.
-    Runs startup logic on boot: auto-creates missing SQL tables and auto-seeds default organization.
-    """
     print(f"🚀 Starting {settings.PROJECT_NAME} (v{settings.VERSION})...")
-    print(f"🔧 Environment: {settings.ENVIRONMENT} | Debug: {settings.DEBUG}")
-
-    # 1. Auto-create all missing SQL tables on boot
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         print("✓ Database tables verified and ready!")
 
-        # 2. Auto-seed default tenant organization if missing
         async with AsyncSessionLocal() as db:
-            org_id = "00000000-0000-0000-0000-000000000001"
+            org_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
             stmt = select(Organization).where(Organization.id == org_id)
             result = await db.execute(stmt)
             if not result.scalar_one_or_none():
@@ -48,42 +41,34 @@ async def lifespan(app: FastAPI):
     except Exception as err:
         print(f"⚠️ Lifespan DB init warning: {err}")
 
-    yield  # Server handles HTTP requests here
-
+    yield
     print(f"🛑 Shutting down {settings.PROJECT_NAME} cleanly...")
 
 
-# 1. Instantiate FastAPI Application
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="Engineered Financial Operating System API for Automated Analysis and Decision Guidance",
-    docs_url="/docs" if settings.DEBUG else None,
-    redoc_url="/redoc" if settings.DEBUG else None,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json" if settings.DEBUG else None,
+    description="Engineered Financial Operating System API",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
     lifespan=lifespan,
 )
 
-# 2. Configure CORS Middleware
+# Robust CORS Configuration: Whitelist + *.onrender.com Regex
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 3. Mount Router Registry (/api/v1)
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
-# 4. System Health Check Endpoint
-@app.get(
-    "/health",
-    status_code=status.HTTP_200_OK,
-    tags=["System Health"],
-    summary="System Health & Status Verification Check",
-)
+@app.get("/health", status_code=status.HTTP_200_OK, tags=["System Health"])
 async def health_check():
     return JSONResponse(
         status_code=200,
@@ -96,15 +81,6 @@ async def health_check():
     )
 
 
-# 5. Root Welcome Endpoint
-@app.get(
-    "/",
-    status_code=status.HTTP_200_OK,
-    tags=["Root"],
-    include_in_schema=False,
-)
+@app.get("/", status_code=status.HTTP_200_OK, include_in_schema=False)
 async def root():
-    return {
-        "message": f"Welcome to {settings.PROJECT_NAME} API Engine",
-        "documentation": "/docs" if settings.DEBUG else "Disabled in Production",
-    }
+    return {"message": f"Welcome to {settings.PROJECT_NAME} API Engine"}

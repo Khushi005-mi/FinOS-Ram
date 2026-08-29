@@ -54,7 +54,8 @@ class IngestionService:
         org_uuid = _to_uuid(organization_id)
         batch_uuid = uuid.uuid4()
         batch_id_str = str(batch_uuid)
-batch = UploadBatch(
+
+        batch = UploadBatch(
             id=batch_uuid,
             organization_id=org_uuid,
             status="PARSING",
@@ -99,13 +100,13 @@ batch = UploadBatch(
 
             consolidated_df = pd.concat(all_parsed_dfs, ignore_index=True)
 
-            
             validation_result = validate_ledger_dataframe(consolidated_df)
             if not validation_result.is_valid:
                 raise ValueError(
                     f"Validation failed: {', '.join(validation_result.validation_errors)}"
                 )
- journal_entries: List[JournalEntry] = []
+
+            journal_entries: List[JournalEntry] = []
             for _, row in consolidated_df.iterrows():
                 entry = JournalEntry(
                     id=uuid.uuid4(),
@@ -127,7 +128,7 @@ batch = UploadBatch(
             batch.status = "PROCESSED"
             batch.total_records_ingested = len(journal_entries)
 
-           
+            # Assign as string VARCHAR to match database schema
             org_stmt = select(Organization).where(Organization.id == org_uuid)
             org_res = await db.execute(org_stmt)
             org = org_res.scalar_one_or_none()

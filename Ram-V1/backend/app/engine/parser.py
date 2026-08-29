@@ -1,6 +1,9 @@
 """
 backend/app/engine/parser.py
-Universal Parser Engine: Pre-scans raw text to skip title banners and preserve all data columns.
+
+Universal Parser Engine:
+- Pre-scans raw text to skip title banners and preserve all data columns.
+- Robust period detection: un-pivots multi-month wide P&L columns ("Jan 2026", "Feb 2026", "Q1 2026").
 """
 import io
 import re
@@ -11,10 +14,11 @@ import pdfplumber
 class FileParsingError(Exception):
     pass
 
+# Matches 'Jan', 'Jan 2026', 'January 2026', 'Jan-26', 'Q1 2026', 'FY26', '2026-01'
 MONTH_PATTERN = re.compile(
     r"^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|"
     r"january|february|march|april|may|june|july|august|september|october|november|december|"
-    r"q[1-4]|fy\d{2,4}|\d{4}-\d{2}|\d{2}/\d{4}|\d{4})$",
+    r"q[1-4]|fy\d{2,4}|\d{4}-\d{2}|\d{2}/\d{4}|\d{4})([\s_-]*\d{2,4})?$",
     re.IGNORECASE,
 )
 

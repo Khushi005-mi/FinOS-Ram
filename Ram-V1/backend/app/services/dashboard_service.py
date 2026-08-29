@@ -1,13 +1,10 @@
 """
 backend/app/services/dashboard_service.py
-
-Service Layer orchestrator for executive financial analytics.
-Guarantees strict active dataset scoping with UUID type safety.
 """
 import uuid
 from typing import Any, Dict, List
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.journal_entry import JournalEntry
@@ -45,7 +42,6 @@ class DashboardService:
 
         org_uuid = _to_uuid(organization_id)
 
-        # 1. Fetch organization to get the active batch pointer
         org_stmt = select(Organization).where(Organization.id == org_uuid)
         org_result = await db.execute(org_stmt)
         org = org_result.scalar_one_or_none()
@@ -53,14 +49,17 @@ class DashboardService:
         if not org or not org.active_batch_id:
             return pd.DataFrame(columns=canonical_columns)
 
-        batch_uuid = _to_uuid(org.active_batch_id)
+        raw_batch = org.active_batch_id
+        batch_uuid = _to_uuid(raw_batch)
 
-        # 2. Query entries strictly matching active_batch_id as UUID
         entry_stmt = (
             select(JournalEntry)
             .where(
                 JournalEntry.organization_id == org_uuid,
-                JournalEntry.upload_batch_id == batch_uuid,
+                or_(
+                    JournalEntry.upload_batch_id == batch_uuid,
+                    JournalEntry.upload_batch_id == str(raw_batch),
+                )
             )
         )
         entry_result = await db.execute(entry_stmt)
@@ -69,7 +68,6 @@ class DashboardService:
         if not entries:
             return pd.DataFrame(columns=canonical_columns)
 
-        # 3. Convert ORM rows to Pandas DataFrame
         records = [
             {
                 "account_category": str(e.account_category or "OPEX"),

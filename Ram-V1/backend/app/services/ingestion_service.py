@@ -1,8 +1,5 @@
 """
 backend/app/services/ingestion_service.py
-
-Service Layer orchestrator for multi-file batch ingestion.
-Guarantees PostgreSQL native UUID type safety when updating active_batch_id.
 """
 import json
 from datetime import date
@@ -56,9 +53,8 @@ class IngestionService:
 
         org_uuid = _to_uuid(organization_id)
         batch_uuid = uuid.uuid4()
-
-        # 1. Create UploadBatch record with UUID
-        batch = UploadBatch(
+        batch_id_str = str(batch_uuid)
+batch = UploadBatch(
             id=batch_uuid,
             organization_id=org_uuid,
             status="PARSING",
@@ -103,15 +99,13 @@ class IngestionService:
 
             consolidated_df = pd.concat(all_parsed_dfs, ignore_index=True)
 
-            # 2. Validate
+            
             validation_result = validate_ledger_dataframe(consolidated_df)
             if not validation_result.is_valid:
                 raise ValueError(
                     f"Validation failed: {', '.join(validation_result.validation_errors)}"
                 )
-
-            # 3. Create JournalEntry rows with native UUIDs
-            journal_entries: List[JournalEntry] = []
+ journal_entries: List[JournalEntry] = []
             for _, row in consolidated_df.iterrows():
                 entry = JournalEntry(
                     id=uuid.uuid4(),
@@ -125,7 +119,7 @@ class IngestionService:
                     credit=_safe_decimal(row.get("credit")),
                     transaction_date=row.get("transaction_date") or date.today(),
                     description=str(row.get("description", row.get("account_name", ""))),
-                    reference_id=str(row.get("reference_id")) if row.get("reference_id") else f"BATCH-{str(batch_uuid)[:6]}",
+                    reference_id=str(row.get("reference_id")) if row.get("reference_id") else f"BATCH-{batch_id_str[:6]}",
                 )
                 journal_entries.append(entry)
 
@@ -133,22 +127,22 @@ class IngestionService:
             batch.status = "PROCESSED"
             batch.total_records_ingested = len(journal_entries)
 
-            # 4. Strictly Update Organization Active Batch with native UUID
+           
             org_stmt = select(Organization).where(Organization.id == org_uuid)
             org_res = await db.execute(org_stmt)
             org = org_res.scalar_one_or_none()
             if org:
-                org.active_batch_id = batch_uuid
+                org.active_batch_id = batch_id_str
 
             await db.commit()
 
             return {
-                "batch_id": str(batch_uuid),
+                "batch_id": batch_id_str,
                 "status": "PROCESSED",
                 "success": True,
                 "file_count": len(files),
                 "total_records_ingested": len(journal_entries),
-                "active_batch_id": str(batch_uuid),
+                "active_batch_id": batch_id_str,
             }
 
         except Exception as err:
@@ -157,7 +151,7 @@ class IngestionService:
             batch.error_message = str(err)[:1000]
             await db.commit()
             return {
-                "batch_id": str(batch_uuid),
+                "batch_id": batch_id_str,
                 "status": "FAILED",
                 "success": False,
                 "error": str(err),

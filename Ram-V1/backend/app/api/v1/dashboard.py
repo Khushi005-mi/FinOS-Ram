@@ -1,14 +1,11 @@
 """
 backend/app/api/v1/dashboard.py
-
-Executive Dashboard API Endpoints:
-Strictly isolated to the active dataset (Organization.active_batch_id).
-No historical data accumulation fallback.
 """
+import uuid
 from typing import Any, Dict, List
 import pandas as pd
 from fastapi import APIRouter, Depends, status
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import TokenData, get_current_tenant_user
@@ -24,6 +21,15 @@ from app.engine.financial_math import (
 router = APIRouter(prefix="/dashboard", tags=["Executive Dashboard"])
 
 
+def _to_uuid(val: Any) -> uuid.UUID:
+    if isinstance(val, uuid.UUID):
+        return val
+    try:
+        return uuid.UUID(str(val))
+    except Exception:
+        return uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+
 @router.get(
     "/metrics",
     status_code=status.HTTP_200_OK,
@@ -33,26 +39,28 @@ async def get_dashboard_metrics(
     db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(get_current_tenant_user),
 ) -> Dict[str, Any]:
-    organization_id = str(current_user.organization_id)
+    org_id = _to_uuid(current_user.organization_id)
 
-    # 1. Fetch Tenant Profile & Active Batch ID
-    org_stmt = select(Organization).where(Organization.id == organization_id)
+    org_stmt = select(Organization).where(Organization.id == org_id)
     org_result = await db.execute(org_stmt)
     org = org_result.scalar_one_or_none()
 
     currency_code = getattr(org, "currency", "INR") if org else "INR"
-    active_batch_id = getattr(org, "active_batch_id", None) if org else None
+    raw_batch_id = getattr(org, "active_batch_id", None) if org else None
 
-    # If no active batch is set, return clean zero metrics immediately
-    if not active_batch_id:
+    if not raw_batch_id:
         return _get_empty_metrics(currency_code)
 
-    # 2. Query Journal Entries strictly isolated to active_batch_id
+    active_batch_uuid = _to_uuid(raw_batch_id)
+
     stmt = (
         select(JournalEntry)
         .where(
-            JournalEntry.organization_id == organization_id,
-            JournalEntry.upload_batch_id == str(active_batch_id),
+            JournalEntry.organization_id == org_id,
+            or_(
+                JournalEntry.upload_batch_id == active_batch_uuid,
+                JournalEntry.upload_batch_id == str(raw_batch_id),
+            )
         )
     )
     result = await db.execute(stmt)
@@ -61,7 +69,6 @@ async def get_dashboard_metrics(
     if not entries:
         return _get_empty_metrics(currency_code)
 
-    # 3. Convert ORM Result Set to Pandas DataFrame
     df = pd.DataFrame(
         [
             {
@@ -75,7 +82,6 @@ async def get_dashboard_metrics(
         ]
     )
 
-    # 4. Compute Metrics strictly for active batch
     return compute_executive_metrics(df, currency_code=currency_code)
 
 
@@ -88,22 +94,26 @@ async def get_monthly_trends_data(
     db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(get_current_tenant_user),
 ) -> List[Dict[str, Any]]:
-    organization_id = str(current_user.organization_id)
+    org_id = _to_uuid(current_user.organization_id)
 
-    org_stmt = select(Organization).where(Organization.id == organization_id)
+    org_stmt = select(Organization).where(Organization.id == org_id)
     org_result = await db.execute(org_stmt)
     org = org_result.scalar_one_or_none()
-    active_batch_id = getattr(org, "active_batch_id", None) if org else None
+    raw_batch_id = getattr(org, "active_batch_id", None) if org else None
 
-    if not active_batch_id:
+    if not raw_batch_id:
         return []
 
-    # Query strictly isolated to active_batch_id
+    active_batch_uuid = _to_uuid(raw_batch_id)
+
     stmt = (
         select(JournalEntry)
         .where(
-            JournalEntry.organization_id == organization_id,
-            JournalEntry.upload_batch_id == str(active_batch_id),
+            JournalEntry.organization_id == org_id,
+            or_(
+                JournalEntry.upload_batch_id == active_batch_uuid,
+                JournalEntry.upload_batch_id == str(raw_batch_id),
+            )
         )
     )
     result = await db.execute(stmt)

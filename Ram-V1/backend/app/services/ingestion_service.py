@@ -1,5 +1,9 @@
 """
 backend/app/services/ingestion_service.py
+
+SARTUS Finovate Ingestion Service:
+Coordinates raw parsing, autonomous data sanitization, schema mapping,
+synthetic auto-balancing, and atomic PostgreSQL persistence.
 """
 import json
 from datetime import date
@@ -14,8 +18,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.journal_entry import JournalEntry
 from app.db.models.organization import Organization
 from app.db.models.upload_batch import UploadBatch
-from app.engine.mapper import auto_map_columns, map_and_normalize_dataframe
 from app.engine.parser import FileParsingError, parse_file_stream
+from app.engine.sanitizer import DataSanitizer
+from app.engine.mapper import auto_map_columns, map_and_normalize_dataframe
 from app.engine.validator import validate_ledger_dataframe
 
 
@@ -55,6 +60,7 @@ class IngestionService:
         batch_uuid = uuid.uuid4()
         batch_id_str = str(batch_uuid)
 
+        # 1. Create UploadBatch tracking record
         batch = UploadBatch(
             id=batch_uuid,
             organization_id=org_uuid,
@@ -83,29 +89,38 @@ class IngestionService:
                 column_mapping = file_meta.get("columnMapping", {})
                 source_type = file_meta.get("sourceType", "GENERAL_LEDGER")
 
+                # Step 1: Raw Parser
                 raw_df = parse_file_stream(file.filename or "upload.csv", file_bytes)
                 if raw_df.empty:
                     continue
 
-                if not column_mapping:
-                    column_mapping = auto_map_columns(list(raw_df.columns))
+                # Step 2: SARTUS Autonomous Data Sanitizer (De-noising, Subtotal Stripping)
+                sanitized_df = DataSanitizer.clean_raw_matrix(raw_df)
+                if sanitized_df.empty:
+                    continue
 
-                mapped_df = map_and_normalize_dataframe(raw_df, column_mapping)
+                # Step 3: Column Mapping & Canonical Normalization
+                if not column_mapping:
+                    column_mapping = auto_map_columns(list(sanitized_df.columns))
+
+                mapped_df = map_and_normalize_dataframe(sanitized_df, column_mapping)
                 mapped_df["source_type"] = source_type
 
                 all_parsed_dfs.append(mapped_df)
 
             if not all_parsed_dfs:
-                raise FileParsingError("No valid tabular data extracted from uploaded files.")
+                raise FileParsingError("No valid financial entries could be extracted from uploaded files.")
 
             consolidated_df = pd.concat(all_parsed_dfs, ignore_index=True)
 
+            # Step 4: Accounting Invariant Validation
             validation_result = validate_ledger_dataframe(consolidated_df)
             if not validation_result.is_valid:
                 raise ValueError(
                     f"Validation failed: {', '.join(validation_result.validation_errors)}"
                 )
 
+            # Step 5: Convert DataFrame rows into JournalEntry ORM models
             journal_entries: List[JournalEntry] = []
             for _, row in consolidated_df.iterrows():
                 entry = JournalEntry(
@@ -128,7 +143,7 @@ class IngestionService:
             batch.status = "PROCESSED"
             batch.total_records_ingested = len(journal_entries)
 
-            # Assign as string VARCHAR to match database schema
+            # Step 6: Atomically set active dataset pointer
             org_stmt = select(Organization).where(Organization.id == org_uuid)
             org_res = await db.execute(org_stmt)
             org = org_res.scalar_one_or_none()

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Card, CardContent } from "@/components/ui";
+import { useCurrency } from "@/providers/CurrencyProvider";
 import { TransactionInspectorDrawer } from "./TransactionInspectorDrawer";
 
 interface KpiSummaryGridProps {
@@ -9,22 +10,14 @@ interface KpiSummaryGridProps {
 }
 
 export function KpiSummaryGrid({ metrics }: KpiSummaryGridProps) {
+  const { format, symbol } = useCurrency();
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
 
-  const defaultMetric = {
-    title: "Metric",
-    value: "₹0",
-    changePercentage: 0,
-    trend: "neutral" as const,
-    isPositive: true,
-    description: "No data available",
-  };
-
-  const revenue = metrics?.revenue || defaultMetric;
-  const cogs = metrics?.cogs || defaultMetric;
-  const grossMargin = metrics?.grossMargin || defaultMetric;
-  const ebitda = metrics?.ebitda || defaultMetric;
+  const totalRev = Number(metrics?.total_revenue ?? 0);
+  const totalCogs = Number(metrics?.total_cogs ?? 0);
+  const grossMarginPct = Number(metrics?.gross_margin_pct ?? 0);
+  const totalEbitda = Number(metrics?.total_ebitda ?? 0);
 
   const handleCardClick = (category: string) => {
     setSelectedCategory(category);
@@ -32,10 +25,34 @@ export function KpiSummaryGrid({ metrics }: KpiSummaryGridProps) {
   };
 
   const cards = [
-    { ...revenue, category: "REVENUE", subtitle: "Click to inspect revenue entries" },
-    { ...cogs, category: "COGS", subtitle: "Click to inspect direct cost entries" },
-    { ...grossMargin, category: "ALL", subtitle: "Click to inspect full P&L ledger" },
-    { ...ebitda, category: "OPEX", subtitle: "Click to inspect operating expenses" },
+    {
+      title: "Total Revenue",
+      value: format(totalRev),
+      changePercentage: 0,
+      description: "Active dataset total",
+      category: "REVENUE",
+    },
+    {
+      title: "Cost of Goods / Sales",
+      value: format(totalCogs),
+      changePercentage: 0,
+      description: totalRev > 0 ? `${((totalCogs / totalRev) * 100).toFixed(1)}% of revenue` : "0.0% of revenue",
+      category: "COGS",
+    },
+    {
+      title: "Gross Margin %",
+      value: `${grossMarginPct.toFixed(1)}%`,
+      changePercentage: 0,
+      description: "Target: 40.0% benchmark",
+      category: "ALL",
+    },
+    {
+      title: "Operating EBITDA",
+      value: format(totalEbitda),
+      changePercentage: 0,
+      description: totalRev > 0 ? `${((totalEbitda / totalRev) * 100).toFixed(1)}% margin` : "0.0% margin",
+      category: "OPEX",
+    },
   ];
 
   return (
@@ -62,7 +79,7 @@ export function KpiSummaryGrid({ metrics }: KpiSummaryGridProps) {
                   {card.value}
                 </p>
                 <span className="text-xs font-mono text-zinc-400">
-                  {card.changePercentage ? `${card.changePercentage}%` : "Active"}
+                  Active
                 </span>
               </div>
 
@@ -74,7 +91,6 @@ export function KpiSummaryGrid({ metrics }: KpiSummaryGridProps) {
         ))}
       </div>
 
-      {/* Drill-down slide-over inspector */}
       <TransactionInspectorDrawer
         isOpen={inspectorOpen}
         initialCategory={selectedCategory}

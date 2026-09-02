@@ -1,11 +1,11 @@
 """
 backend/app/engine/financial_math.py
 
-Financial Calculation Engine:
-- Executive KPIs (Revenue, COGS, Gross Margin, EBITDA)
-- Chronological Monthly Trend Aggregation
-- Dynamic COGS Tri-Breakdown
-- Data-driven CFO Automated Insights
+Universal Financial Math Engine:
+- Calculates Executive KPIs with Zero-Zero Mathematical Recovery Guarantee.
+- Chronological Monthly Trend Aggregation.
+- Dynamic COGS Tri-Breakdown.
+- Automated CFO Diagnostic Insights.
 """
 from typing import Any, Dict, List
 import pandas as pd
@@ -31,6 +31,7 @@ def compute_executive_metrics(df: pd.DataFrame, currency_code: str = "INR") -> D
     if df.empty:
         return _get_empty_metrics(symbol)
 
+    # 1. Standard Category Masking
     rev_mask = df["account_category"].astype(str).str.upper() == "REVENUE"
     cogs_mask = df["account_category"].astype(str).str.upper() == "COGS"
     opex_mask = df["account_category"].astype(str).str.upper() == "OPEX"
@@ -42,6 +43,16 @@ def compute_executive_metrics(df: pd.DataFrame, currency_code: str = "INR") -> D
     total_revenue = max(0.0, total_revenue)
     total_cogs = max(0.0, total_cogs)
     total_opex = max(0.0, total_opex)
+
+    # 2. ZERO-ZERO MATHEMATICAL RECOVERY GUARANTEE
+    # If explicit categories returned 0, but dataset has non-zero credits or debits, resolve directionally
+    all_credits = float(df["credit"].sum()) if "credit" in df.columns else 0.0
+    all_debits = float(df["debit"].sum()) if "debit" in df.columns else 0.0
+
+    if total_revenue == 0.0 and total_cogs == 0.0 and total_opex == 0.0:
+        if all_credits > 0.0 or all_debits > 0.0:
+            total_revenue = all_credits
+            total_opex = all_debits
 
     gross_profit = total_revenue - total_cogs
     ebitda = gross_profit - total_opex

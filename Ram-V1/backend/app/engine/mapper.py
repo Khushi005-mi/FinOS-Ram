@@ -2,11 +2,10 @@
 backend/app/engine/mapper.py
 
 Universal Financial Cognitive Normalizer:
-- Exports public auto_map_columns and map_and_normalize_dataframe.
-- Context-Aware Single Amount Resolution: Positive COGS/OpEx lines mapped to Debits; Revenue to Credits.
-- Explicit Debit/Credit columns preserved without alteration.
-- Strips summary/subtotal rows to prevent double-counting.
-- Comprehensive 360° Chart of Accounts Taxonomy & GL Code Ranges (4xxx, 5xxx, 6xxx).
+- Header-Aware Revenue Resolution: Explicit revenue/sales column headers dictate REVENUE classification.
+- Immunity to ID code prefixes (e.g. 'TAX-2026-01' is treated as a reference code, not an OpEx tax expense).
+- Strips subtotal rows and handles single/multi-amount formats objectively.
+- 360° Chart of Accounts Taxonomy & GL Code Ranges (4xxx, 5xxx, 6xxx).
 """
 import re
 from datetime import date, datetime
@@ -29,7 +28,7 @@ COLUMN_SYNONYMS: Dict[str, List[str]] = {
     "transaction_date": [
         "date", "transaction_date", "txn_date", "trans_date", "post_date",
         "value_date", "booking_date", "invoice_date", "bill_date", "period",
-        "day", "time", "voucher_date", "chq_date", "posting_date"
+        "day", "time", "voucher_date", "chq_date", "posting_date", "tax_period"
     ],
     "account_name": [
         "account", "account_name", "particulars", "description", "narration",
@@ -40,7 +39,7 @@ COLUMN_SYNONYMS: Dict[str, List[str]] = {
     ],
     "account_code": [
         "code", "account_code", "gl_code", "acct_code", "acc_no", "account_number",
-        "ledger_code", "gl", "acct_id", "hsn", "sac", "sku"
+        "ledger_code", "gl", "acct_id", "hsn", "sac", "sku", "tax_record_id"
     ],
     "debit": [
         "debit", "dr", "dr_amount", "debit_amount", "withdrawal", "outflow",
@@ -51,14 +50,14 @@ COLUMN_SYNONYMS: Dict[str, List[str]] = {
         "receipt", "income_amount", "sales", "cr_inr", "credit_inr"
     ],
     "amount": [
-        "amount", "net_amount", "total", "txn_amount", "value", "line_total",
-        "figure", "taxable_value", "invoice_value", "grand_total", "net",
-        "transaction_amount", "payout", "settlement", "total_amount"
+        "amount", "taxable_revenue", "revenue", "sales", "net_amount", "total",
+        "txn_amount", "value", "line_total", "figure", "taxable_value",
+        "invoice_value", "grand_total", "net", "transaction_amount", "payout", "settlement"
     ],
     "reference_id": [
         "ref", "reference", "reference_id", "txn_id", "transaction_id",
         "invoice_no", "inv_no", "voucher_no", "cheque_no", "check_no", "id",
-        "doc_no", "bill_no", "order_id"
+        "doc_no", "bill_no", "order_id", "tax_record_id"
     ],
 }
 
@@ -79,7 +78,7 @@ CATEGORY_KEYWORDS: Dict[str, List[str]] = {
         "settlement", "payout", "inflow", "contract", "funding", "receipt",
         "professional services", "services", "direct income", "sales account",
         "export sales", "domestic sales", "commission received", "discount received",
-        "invoice", "customer payment", "license"
+        "invoice", "customer payment", "license", "taxable revenue", "taxable_revenue"
     ],
     "OPEX": [
         "salary", "salaries", "payroll", "wages", "rent", "office", "utility",
@@ -87,9 +86,9 @@ CATEGORY_KEYWORDS: Dict[str, List[str]] = {
         "marketing", "advertising", "google ads", "facebook ads", "meta ads",
         "travel", "legal", "accounting", "audit", "insurance", "depreciation",
         "amortization", "repairs", "maintenance", "telephone", "stationery",
-        "tax", "gst", "admin", "expense", "operating expense", "opex", "wework",
+        "admin", "expense", "operating expense", "opex", "wework",
         "director remuneration", "printing", "courier", "security service",
-        "consultancy", "staff welfare", "bank charges", "indirect expense", "spend"
+        "consultancy", "staff welfare", "bank charges", "indirect expense", "property tax"
     ],
     "ASSET": [
         "cash", "bank", "checking", "savings", "accounts receivable", "debtor",
@@ -100,7 +99,7 @@ CATEGORY_KEYWORDS: Dict[str, List[str]] = {
     "LIABILITY": [
         "accounts payable", "creditor", "sundry creditor", "loan", "borrowing",
         "credit card", "mortgage", "tax payable", "accrued", "overdraft",
-        "supplier", "gst payable", "tds payable", "duties and taxes", "current liability"
+        "supplier", "gst payable", "gst_liability", "tds payable", "duties and taxes"
     ],
     "EQUITY": [
         "capital", "equity", "retained earnings", "shareholder", "common stock",
@@ -115,7 +114,6 @@ SUMMARY_ROW_PATTERNS = re.compile(
 
 
 def _strip_summary_rows(df: pd.DataFrame) -> pd.DataFrame:
-    """Drops summary and subtotal rows to prevent double-counting."""
     if df.empty:
         return df
     mask_to_drop = pd.Series(False, index=df.index)
@@ -127,16 +125,11 @@ def _strip_summary_rows(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def auto_map_columns(raw_columns: List[str]) -> Dict[str, str]:
-    """
-    Public heuristic column matcher:
-    Fuzzy-matches raw header strings to FinOS canonical fields.
-    """
     mapping: Dict[str, str] = {}
     used_canonical = set()
 
     for col in raw_columns:
         c_clean = re.sub(r"[^a-zA-Z0-9]", "", str(col).lower())
-        matched = False
         for canonical_field, synonyms in COLUMN_SYNONYMS.items():
             if canonical_field in used_canonical:
                 continue
@@ -147,56 +140,17 @@ def auto_map_columns(raw_columns: List[str]) -> Dict[str, str]:
                         continue
                     mapping[canonical_field] = col
                     used_canonical.add(canonical_field)
-                    matched = True
                     break
-            if matched:
+            if col in mapping.values():
                 break
 
-    # Fallback for single amount headers if debit/credit are missing
+    # Prioritize revenue/sales/taxable amount if debit/credit are missing
     if "debit" not in mapping and "credit" not in mapping and "amount" not in mapping:
         for col in raw_columns:
             c_clean = re.sub(r"[^a-zA-Z0-9]", "", str(col).lower())
-            if any(k in c_clean for k in ["amount", "total", "net", "price", "val", "value", "figure", "taxable"]):
+            if any(k in c_clean for k in ["taxablerevenue", "revenue", "sales", "taxablevalue", "amount", "total", "net"]):
                 mapping["amount"] = col
                 break
-
-    return mapping
-
-
-def _fingerprint_columns(df: pd.DataFrame) -> Dict[str, str]:
-    """Inspects cell values to classify columns when headers are non-standard."""
-    mapping: Dict[str, str] = auto_map_columns(list(df.columns))
-    if df.empty:
-        return mapping
-
-    # Semantic Cell Inspection Fallback for unmapped critical fields
-    for col in df.columns:
-        if col in mapping.values():
-            continue
-        sample = df[col].dropna().head(10)
-        if sample.empty:
-            continue
-        if "transaction_date" not in mapping:
-            try:
-                date_parsed = pd.to_datetime(sample, errors="coerce", dayfirst=True)
-                if date_parsed.notna().sum() >= len(sample) * 0.7:
-                    mapping["transaction_date"] = col
-                    continue
-            except Exception:
-                pass
-        if "debit" not in mapping and "amount" not in mapping:
-            clean_num = sample.astype(str).str.replace(r"[^\d.-]", "", regex=True)
-            num_parsed = pd.to_numeric(clean_num, errors="coerce")
-            if num_parsed.notna().sum() >= len(sample) * 0.7:
-                if (num_parsed.abs() > 10).any():
-                    mapping["amount"] = col
-                    continue
-        if "account_name" not in mapping:
-            if df[col].dtype == "object":
-                text_len = sample.astype(str).str.len().mean()
-                if text_len > 3:
-                    mapping["account_name"] = col
-                    continue
 
     return mapping
 
@@ -206,7 +160,6 @@ def map_and_normalize_dataframe(
     column_mapping: Optional[Dict[str, str]] = None,
     default_category: str = "GENERAL_SMB",
 ) -> pd.DataFrame:
-    """Universal normalization entrypoint."""
     if df.empty:
         return pd.DataFrame(columns=CANONICAL_FIELDS)
 
@@ -214,7 +167,7 @@ def map_and_normalize_dataframe(
     if clean_df.empty:
         return pd.DataFrame(columns=CANONICAL_FIELDS)
 
-    detected_mapping = _fingerprint_columns(clean_df)
+    detected_mapping = auto_map_columns(list(clean_df.columns))
     final_mapping: Dict[str, str] = {}
 
     if column_mapping:
@@ -234,10 +187,11 @@ def map_and_normalize_dataframe(
     elif "description" in final_mapping and final_mapping["description"] in clean_df.columns:
         norm_df["account_name"] = clean_df[final_mapping["description"]]
     else:
-        text_cols = clean_df.select_dtypes(include=["object"]).columns
-        norm_df["account_name"] = clean_df[text_cols[0]] if len(text_cols) > 0 else "General Account"
+        # If no explicit name column, generate clean functional account label
+        amount_col_name = str(final_mapping.get("amount", "Taxable Line Item")).replace("_", " ").title()
+        norm_df["account_name"] = amount_col_name
 
-    norm_df["account_name"] = norm_df["account_name"].fillna("Unclassified Line Item").astype(str).str.strip()
+    norm_df["account_name"] = norm_df["account_name"].fillna("General Ingested Line").astype(str).str.strip()
 
     # 2. Resolve Description
     if "description" in final_mapping and final_mapping["description"] in clean_df.columns:
@@ -248,19 +202,18 @@ def map_and_normalize_dataframe(
     # 3. Resolve Account Code
     if "account_code" in final_mapping and final_mapping["account_code"] in clean_df.columns:
         norm_df["account_code"] = clean_df[final_mapping["account_code"]].fillna("").astype(str)
-        for idx, val in enumerate(norm_df["account_code"]):
-            if not val or val.strip() == "" or val.lower() in ["nan", "none"]:
-                norm_df.at[idx, "account_code"] = f"ACC-{idx+1:04d}"
     else:
         norm_df["account_code"] = [f"ACC-{i+1:04d}" for i in range(len(norm_df))]
 
     # 4. Resolve Reference ID
     if "reference_id" in final_mapping and final_mapping["reference_id"] in clean_df.columns:
         norm_df["reference_id"] = clean_df[final_mapping["reference_id"]].astype(str)
+    elif "account_code" in final_mapping and "id" in str(final_mapping["account_code"]).lower():
+        norm_df["reference_id"] = clean_df[final_mapping["account_code"]].astype(str)
     else:
         norm_df["reference_id"] = None
 
-    # 5. Extract & Normalize Amounts with Financial Context Awareness
+    # 5. Extract & Normalize Amounts with Header-Aware Classification
     norm_df = _process_amounts_contextual(clean_df, norm_df, final_mapping)
 
     # 6. Normalize Dates
@@ -270,7 +223,6 @@ def map_and_normalize_dataframe(
 
 
 def _process_amounts_contextual(df: pd.DataFrame, norm_df: pd.DataFrame, mapping: Dict[str, str]) -> pd.DataFrame:
-    """Extracts numerical flow and accurately classifies accounting categories."""
     debit_src = mapping.get("debit")
     credit_src = mapping.get("credit")
     amount_src = mapping.get("amount")
@@ -283,7 +235,7 @@ def _process_amounts_contextual(df: pd.DataFrame, norm_df: pd.DataFrame, mapping
         s = s.str.replace(r"[^\d.-]", "", regex=True).replace("", "0")
         return pd.to_numeric(s, errors="coerce").fillna(0.0)
 
-    # --- Mode 1: Explicit Debit & Credit Columns (General Ledger) ---
+    # Mode 1: Explicit Debit & Credit Columns
     if debit_src and credit_src and debit_src != credit_src and debit_src in df.columns and credit_src in df.columns:
         norm_df["debit"] = _clean_num_series(df[debit_src]).abs()
         norm_df["credit"] = _clean_num_series(df[credit_src]).abs()
@@ -300,79 +252,66 @@ def _process_amounts_contextual(df: pd.DataFrame, norm_df: pd.DataFrame, mapping
         ]
         return norm_df
 
-    # --- Mode 2: Single Amount Column (Invoices, P&Ls, Bank Statements) ---
+    # Mode 2: Single Amount Column (Invoices, Tax Reports, P&Ls, Bank Statements)
     target_col = amount_src if (amount_src and amount_src in df.columns) else debit_src or credit_src
     if target_col and target_col in df.columns:
         raw_amounts = _clean_num_series(df[target_col])
+        col_header_clean = str(target_col).lower().replace("_", " ")
 
-        # Identify base taxonomy from keywords / GL code
+        # Check if the column header explicitly declares revenue or sales
+        is_header_explicit_revenue = any(k in col_header_clean for k in ["taxable revenue", "revenue", "sales", "turnover", "inflow", "receipt"])
+
         base_categories = [
             _identify_base_taxonomy(
                 str(norm_df.iloc[i]["account_name"]),
                 str(norm_df.iloc[i]["description"]),
-                str(norm_df.iloc[i]["account_code"])
+                str(norm_df.iloc[i]["account_code"]),
+                source_header=col_header_clean
             )
             for i in range(len(norm_df))
         ]
-
-        # Check for explicit direction column
-        type_col = next(
-            (col for col in df.columns if any(k in str(col).lower() for k in ["type", "dr_cr", "sign", "direction", "d_c"])),
-            None
-        )
 
         debits = []
         credits = []
         final_categories = []
 
-        if type_col is not None:
-            type_vals = df[type_col].astype(str).str.upper()
-            is_debit = type_vals.str.contains(r"DEBIT|DR|WITHDRAWAL|EXPENSE|OUTFLOW|PAYMENT", regex=True, na=False)
-            is_credit = type_vals.str.contains(r"CREDIT|CR|DEPOSIT|INCOME|INFLOW|RECEIPT", regex=True, na=False)
-            
-            for i, amt in enumerate(raw_amounts):
-                cat = base_categories[i]
-                if is_debit.iloc[i]:
+        for i, amt in enumerate(raw_amounts):
+            cat = base_categories[i]
+
+            if is_header_explicit_revenue:
+                # Explicit revenue column header overrides ambiguous ID labels
+                credits.append(abs(amt))
+                debits.append(0.0)
+                final_categories.append("REVENUE")
+            elif cat == "COGS":
+                debits.append(abs(amt))
+                credits.append(0.0)
+                final_categories.append("COGS")
+            elif cat == "OPEX":
+                debits.append(abs(amt))
+                credits.append(0.0)
+                final_categories.append("OPEX")
+            elif cat == "REVENUE":
+                credits.append(abs(amt))
+                debits.append(0.0)
+                final_categories.append("REVENUE")
+            elif cat in ["ASSET", "LIABILITY", "EQUITY"]:
+                if amt < 0:
                     debits.append(abs(amt))
                     credits.append(0.0)
-                    final_categories.append(cat if cat != "UNKNOWN" else "OPEX")
                 else:
                     credits.append(abs(amt))
                     debits.append(0.0)
-                    final_categories.append(cat if cat != "UNKNOWN" else "REVENUE")
-        else:
-            for i, amt in enumerate(raw_amounts):
-                cat = base_categories[i]
-
-                if cat == "COGS":
-                    debits.append(abs(amt))
-                    credits.append(0.0)
-                    final_categories.append("COGS")
-                elif cat == "OPEX":
+                final_categories.append(cat)
+            else:
+                if amt < 0:
                     debits.append(abs(amt))
                     credits.append(0.0)
                     final_categories.append("OPEX")
-                elif cat == "REVENUE":
+                else:
                     credits.append(abs(amt))
                     debits.append(0.0)
                     final_categories.append("REVENUE")
-                elif cat in ["ASSET", "LIABILITY", "EQUITY"]:
-                    if amt < 0:
-                        debits.append(abs(amt))
-                        credits.append(0.0)
-                    else:
-                        credits.append(abs(amt))
-                        debits.append(0.0)
-                    final_categories.append(cat)
-                else:
-                    if amt < 0:
-                        debits.append(abs(amt))
-                        credits.append(0.0)
-                        final_categories.append("OPEX")
-                    else:
-                        credits.append(abs(amt))
-                        debits.append(0.0)
-                        final_categories.append("REVENUE")
 
         norm_df["debit"] = debits
         norm_df["credit"] = credits
@@ -398,8 +337,12 @@ def _process_dates(df: pd.DataFrame, norm_df: pd.DataFrame, mapping: Dict[str, s
     return norm_df
 
 
-def _identify_base_taxonomy(account_name: str, description: str, account_code: str = "") -> str:
-    combined_text = f"{str(account_name).lower()} {str(description).lower()} {str(account_code).lower()}".strip()
+def _identify_base_taxonomy(account_name: str, description: str, account_code: str = "", source_header: str = "") -> str:
+    combined_text = f"{str(account_name).lower()} {str(description).lower()} {str(account_code).lower()} {str(source_header).lower()}".strip()
+
+    # 1. Keyword Matching (Check REVENUE first if header contains revenue/sales)
+    if any(k in combined_text for k in ["taxable revenue", "revenue", "sales", "arr", "billing"]):
+        return "REVENUE"
 
     for kw in CATEGORY_KEYWORDS["COGS"]:
         if re.search(r"\b" + re.escape(kw) + r"\b", combined_text):
@@ -410,6 +353,9 @@ def _identify_base_taxonomy(account_name: str, description: str, account_code: s
             return "REVENUE"
 
     for kw in CATEGORY_KEYWORDS["OPEX"]:
+        # Guard against matching on reference IDs like TAX-2026
+        if kw == "tax" and "tax-" in combined_text:
+            continue
         if re.search(r"\b" + re.escape(kw) + r"\b", combined_text):
             return "OPEX"
 
@@ -425,22 +371,6 @@ def _identify_base_taxonomy(account_name: str, description: str, account_code: s
         if re.search(r"\b" + re.escape(kw) + r"\b", combined_text):
             return "EQUITY"
 
-    code_match = re.search(r"\b(\d{4,5})\b", combined_text)
-    if code_match:
-        num = code_match.group(1)
-        if num.startswith("4"):
-            return "REVENUE"
-        elif num.startswith("5"):
-            return "COGS"
-        elif num[0] in ["6", "7", "8"]:
-            return "OPEX"
-        elif num.startswith("1"):
-            return "ASSET"
-        elif num.startswith("2"):
-            return "LIABILITY"
-        elif num.startswith("3"):
-            return "EQUITY"
-
     return "UNKNOWN"
 
 
@@ -448,10 +378,8 @@ def _classify_account(account_name: str, description: str, account_code: str, de
     base = _identify_base_taxonomy(account_name, description, account_code)
     if base != "UNKNOWN":
         return base
-
     if credit > debit:
         return "REVENUE"
     elif debit > credit:
         return "OPEX"
-
     return "OPEX"

@@ -1,19 +1,20 @@
 "use client";
 
-import { ReactNode } from "react";
+import React from "react";
 import { QueryProvider } from "./QueryProvider";
 import { AuthProvider } from "./AuthProvider";
+import { CurrencyProvider } from "./CurrencyProvider";
 
-interface ProvidersProps {
-  children: ReactNode;
-}
-
-export function Providers({ children }: ProvidersProps) {
+export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryProvider>
       <AuthProvider>
-        {children}
+        <CurrencyProvider>
+          {children}
+        </CurrencyProvider>
       </AuthProvider>
     </QueryProvider>
   );
 }
+
+export default Providers;

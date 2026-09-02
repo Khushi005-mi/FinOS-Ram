@@ -4,6 +4,11 @@ import { KpiSummaryGrid } from "@/modules/dashboard/components/KpiSummaryGrid";
 import { RevenueVsCostChart } from "@/modules/dashboard/components/RevenueVsCostChart";
 import { UniversalCostBreakdownWidget } from "@/modules/dashboard/components/UniversalCostBreakdownWidget";
 import { ExecutiveInsightsWidget } from "@/modules/dashboard/components/ExecutiveInsightsWidget";
+import { RunwayBurnWidget } from "@/modules/dashboard/components/RunwayBurnWidget";
+import { ScenarioSimulatorWidget } from "@/modules/dashboard/components/ScenarioSimulatorWidget";
+import { DatasetVaultDrawer } from "@/modules/dashboard/components/DatasetVaultDrawer";
+import { RecentLedgerActivity } from "@/modules/dashboard/components/RecentLedgerActivity";
+import { AnomalyRadarWidget } from "@/modules/dashboard/components/AnomalyRadarWidget";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -31,18 +36,32 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8 p-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-white">Executive Financial Overview</h1>
-        <p className="text-sm text-slate-400 mt-1">
-          Real-time margins, revenue trends, and diagnostic cost analytics.
-        </p>
+    <div className="mx-auto max-w-7xl space-y-6 p-6 sm:p-8">
+      {/* Top Header with Dataset Vault Button */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-white">Executive Command Center</h1>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Real-time margins, predictive scenario modeling, and enterprise dataset governance.
+          </p>
+        </div>
+        <DatasetVaultDrawer />
       </div>
 
-      {/* Top KPI Cards Grid */}
+      {/* Top Row: Executive KPI Cards */}
       <KpiSummaryGrid metrics={metrics} />
 
-      {/* Charts & Breakdown Row */}
+      {/* Second Row: What-If Simulator & Cash Runway */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <ScenarioSimulatorWidget metrics={metrics} />
+        </div>
+        <div>
+          <RunwayBurnWidget metrics={metrics} />
+        </div>
+      </div>
+
+      {/* Third Row: Charts & COGS Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <RevenueVsCostChart data={trends} />
@@ -52,8 +71,14 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Executive Insights Bottom Section */}
-      <ExecutiveInsightsWidget insights={insights} />
+      {/* Fourth Row: Cost Leakage Anomaly Radar & CFO Insights */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <AnomalyRadarWidget metrics={metrics} costBreakdown={costBreakdown} />
+        <ExecutiveInsightsWidget insights={insights} />
+      </div>
+
+      {/* Bottom Section: Immutable SOC2 Audit Trail Shield */}
+      <RecentLedgerActivity />
     </div>
   );
 }

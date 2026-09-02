@@ -4,14 +4,17 @@ backend/app/services/dashboard_service.py
 import uuid
 from typing import Any, Dict, List
 import pandas as pd
-from sqlalchemy import select, or_
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.journal_entry import JournalEntry
 from app.db.models.organization import Organization
 from app.engine.financial_math import (
+    compute_executive_metrics,
+    compute_monthly_trends,
     compute_cogs_breakdown,
     generate_cfo_insights,
+    _get_empty_metrics,
 )
 
 
@@ -42,6 +45,7 @@ class DashboardService:
 
         org_uuid = _to_uuid(organization_id)
 
+        # 1. Fetch organization to get the active batch pointer
         org_stmt = select(Organization).where(Organization.id == org_uuid)
         org_result = await db.execute(org_stmt)
         org = org_result.scalar_one_or_none()
@@ -49,17 +53,14 @@ class DashboardService:
         if not org or not org.active_batch_id:
             return pd.DataFrame(columns=canonical_columns)
 
-        raw_batch = org.active_batch_id
-        batch_uuid = _to_uuid(raw_batch)
+        batch_uuid = _to_uuid(org.active_batch_id)
 
+        # 2. Query entries strictly matching active_batch_id as UUID
         entry_stmt = (
             select(JournalEntry)
             .where(
                 JournalEntry.organization_id == org_uuid,
-                or_(
-                    JournalEntry.upload_batch_id == batch_uuid,
-                    JournalEntry.upload_batch_id == str(raw_batch),
-                )
+                JournalEntry.upload_batch_id == batch_uuid,
             )
         )
         entry_result = await db.execute(entry_stmt)
@@ -99,3 +100,24 @@ class DashboardService:
     ) -> List[Dict[str, Any]]:
         df = await cls.get_active_batch_dataframe(db, organization_id)
         return generate_cfo_insights(df)
+
+    @classmethod
+    async def get_executive_overview(
+        cls,
+        db: AsyncSession,
+        organization_id: Any,
+    ) -> Dict[str, Any]:
+        df = await cls.get_active_batch_dataframe(db, organization_id)
+        if df.empty:
+            return {
+                "metrics": _get_empty_metrics(),
+                "trends": [],
+                "cogs_breakdown": compute_cogs_breakdown(df),
+                "insights": [],
+            }
+        return {
+            "metrics": compute_executive_metrics(df),
+            "trends": compute_monthly_trends(df),
+            "cogs_breakdown": compute_cogs_breakdown(df),
+            "insights": generate_cfo_insights(df),
+        }

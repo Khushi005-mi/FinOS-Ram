@@ -1,71 +1,59 @@
 "use client";
 
 import React, { useState } from "react";
-import { Button, Select } from "@/components/ui";
-
-const PERIOD_OPTIONS = [
-  { label: "Q1 2024 (Jan - Mar)", value: "Q1_2024" },
-  { label: "Q2 2024 (Apr - Jun)", value: "Q2_2024" },
-  { label: "Full Fiscal Year 2023-2024", value: "FY_2023_2024" },
-];
+import { env } from "@/config/env";
 
 export function ExportBar() {
-  const [selectedPeriod, setSelectedPeriod] = useState<string>("Q1_2024");
-  const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
-  const [isExportingExcel, setIsExportingExcel] = useState<boolean>(false);
+  const [isDownloadingExcel, setIsDownloadingExcel] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
-  const handleExportPdf = () => {
-    setIsExportingPdf(true);
-    setTimeout(() => {
-      setIsExportingPdf(false);
-      alert("Financial Statement PDF report downloaded successfully.");
-    }, 1200);
+  const handleDownloadExcel = async () => {
+    setIsDownloadingExcel(true);
+    try {
+      const exportUrl = `${env.NEXT_PUBLIC_API_URL}/reports/export/excel`;
+      // Trigger native browser download stream
+      window.location.href = exportUrl;
+    } catch (err) {
+      console.error("Excel export error:", err);
+    } finally {
+      setTimeout(() => setIsDownloadingExcel(false), 2000);
+    }
   };
 
-  const handleExportExcel = () => {
-    setIsExportingExcel(true);
+  const handlePrintPdf = () => {
+    setIsGeneratingPdf(true);
+    // Uses browser vector print engine (Cmd + P / Print to PDF) formatted for financial statements
     setTimeout(() => {
-      setIsExportingExcel(false);
-      alert("Financial Statement Excel model downloaded successfully.");
-    }, 1200);
+      window.print();
+      setIsGeneratingPdf(false);
+    }, 300);
   };
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
-      {/* Fiscal Period Selector */}
-      <div className="flex items-center space-x-3 w-full sm:w-auto">
-        <span className="text-sm font-semibold text-slate-700 shrink-0">
-          Reporting Period:
-        </span>
-        <div className="w-64">
-          <Select
-            value={selectedPeriod}
-            onChange={(e) => setSelectedPeriod(e.target.value)}
-            options={PERIOD_OPTIONS}
-          />
-        </div>
-      </div>
+    <div className="flex items-center space-x-3">
+      {/* Download Excel Button */}
+      <button
+        type="button"
+        onClick={handleDownloadExcel}
+        disabled={isDownloadingExcel}
+        className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-zinc-900 border border-white/10 hover:border-white/20 text-xs font-semibold text-zinc-200 hover:text-white shadow-sm transition active:scale-[0.98] disabled:opacity-50"
+      >
+        <span>📊</span>
+        <span>{isDownloadingExcel ? "Exporting Excel..." : "Export Excel (.xlsx)"}</span>
+      </button>
 
-      {/* Export Action Buttons */}
-      <div className="flex items-center space-x-3">
-        <Button
-          variant="outline"
-          size="sm"
-          isLoading={isExportingExcel}
-          onClick={handleExportExcel}
-        >
-          Export Excel (.xlsx)
-        </Button>
-
-        <Button
-          variant="primary"
-          size="sm"
-          isLoading={isExportingPdf}
-          onClick={handleExportPdf}
-        >
-          Export PDF Report
-        </Button>
-      </div>
+      {/* Print / Export Vector PDF Button */}
+      <button
+        type="button"
+        onClick={handlePrintPdf}
+        disabled={isGeneratingPdf}
+        className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-sm shadow-indigo-600/30 transition active:scale-[0.98] disabled:opacity-50"
+      >
+        <span>📄</span>
+        <span>{isGeneratingPdf ? "Preparing Deck..." : "Download Board PDF"}</span>
+      </button>
     </div>
   );
 }
+
+export default ExportBar;

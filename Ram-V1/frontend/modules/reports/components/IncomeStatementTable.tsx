@@ -1,135 +1,117 @@
 "use client";
 
 import React from "react";
-import { FinancialStatementPayload } from "../types/reportsTypes";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui";
-import { formatCurrency } from "@/lib/formatters";
 
-interface IncomeStatementTableProps {
-  data: FinancialStatementPayload;
+interface IncomeStatementProps {
+  data?: any;
 }
 
-export function IncomeStatementTable({ data }: IncomeStatementTableProps) {
-  const currency = data?.currency || "INR";
+export function IncomeStatementTable({ data }: IncomeStatementProps) {
+  const rev = Number(data?.total_revenue ?? 0);
+  const cogs = Number(data?.total_cogs ?? 0);
+  const gp = Number(data?.gross_profit ?? 0);
+  const opex = Number(data?.total_opex ?? 0);
+  const ebitda = Number(data?.net_operating_income ?? 0);
+  const marginPct = Number(data?.gross_margin_pct ?? 0);
 
-  const renderAmount = (amount: number) => formatCurrency(amount, currency);
+  const formatAmt = (val: number) => `₹${val.toLocaleString("en-IN")}`;
 
   return (
-    <Card className="w-full apple-glass border-white/10">
-      <CardHeader className="border-b border-white/10 pb-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+    <Card className="apple-glass border-white/10">
+      <CardHeader className="border-b border-white/5 pb-4">
+        <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-white text-lg font-bold">
+            <CardTitle className="text-white text-base font-bold">
               Income Statement (Profit & Loss)
             </CardTitle>
             <p className="text-xs text-zinc-400 mt-0.5">
-              {data.organizationName} • Reporting Period: {data.periodName} ({currency})
+              GAAP compliant multi-step operating performance.
             </p>
           </div>
+          <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+            {marginPct}% Gross Margin
+          </span>
         </div>
       </CardHeader>
 
-      <CardContent className="pt-4 px-0">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-white/10 bg-zinc-900/80 text-zinc-400 font-semibold text-[11px]">
-                <th className="py-2.5 px-6">Account Code & Description</th>
-                <th className="py-2.5 px-6 text-right">Amount ({currency})</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5 text-zinc-300">
-              {/* 1. REVENUE SECTION */}
-              <tr className="bg-zinc-900/60 font-semibold text-white">
-                <td className="py-2.5 px-6" colSpan={2}>
-                  Operating Revenue
-                </td>
-              </tr>
-              {data.revenue.map((row) => (
-                <tr key={row.id} className="hover:bg-white/5 transition-colors">
-                  <td className="py-2 px-6 text-zinc-300 pl-10 font-mono">
-                    {row.accountCode && <span className="text-zinc-500 mr-2">{row.accountCode}</span>}
-                    {row.accountName}
-                  </td>
-                  <td className="py-2 px-6 text-right font-mono font-medium text-white">
-                    {renderAmount(row.amount)}
-                  </td>
-                </tr>
-              ))}
-              <tr className="bg-zinc-900 font-bold border-t border-white/10">
-                <td className="py-2.5 px-6 text-white">Total Operating Revenue</td>
-                <td className="py-2.5 px-6 text-right font-mono text-emerald-400">
-                  {renderAmount(data.totalRevenue)}
-                </td>
-              </tr>
+      <CardContent className="space-y-6 pt-4 font-mono text-xs">
+        {/* 1. Revenue Tier */}
+        <div>
+          <div className="flex justify-between font-bold text-zinc-400 uppercase text-[11px] pb-2 border-b border-white/5">
+            <span>Operating Revenue</span>
+            <span>Amount (INR)</span>
+          </div>
+          <div className="py-2 space-y-1.5 text-zinc-300">
+            {Array.isArray(data?.revenue_items) && data.revenue_items.map((item: any, idx: number) => (
+              <div key={idx} className="flex justify-between pl-3 hover:text-white">
+                <span className="text-zinc-400">{item.name}</span>
+                <span>{formatAmt(item.amount)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-between font-bold text-white pt-2 border-t border-white/5 bg-zinc-900/40 px-3 py-1.5 rounded-lg">
+            <span>Total Revenue</span>
+            <span>{formatAmt(rev)}</span>
+          </div>
+        </div>
 
-              {/* 2. COST OF SALES / COGS SECTION */}
-              <tr className="bg-zinc-900/60 font-semibold text-white">
-                <td className="py-2.5 px-6" colSpan={2}>
-                  Cost of Goods / Direct Sales Expense
-                </td>
-              </tr>
-              {data.costOfSales.map((row) => (
-                <tr key={row.id} className="hover:bg-white/5 transition-colors">
-                  <td className="py-2 px-6 text-zinc-300 pl-10 font-mono">
-                    {row.accountCode && <span className="text-zinc-500 mr-2">{row.accountCode}</span>}
-                    {row.accountName}
-                  </td>
-                  <td className="py-2 px-6 text-right font-mono font-medium text-white">
-                    {renderAmount(row.amount)}
-                  </td>
-                </tr>
-              ))}
-              <tr className="bg-zinc-900 font-bold border-t border-white/10">
-                <td className="py-2.5 px-6 text-white">Total Cost of Sales</td>
-                <td className="py-2.5 px-6 text-right font-mono text-rose-400">
-                  {renderAmount(data.totalCostOfSales)}
-                </td>
-              </tr>
+        {/* 2. COGS Tier */}
+        <div>
+          <div className="flex justify-between font-bold text-zinc-400 uppercase text-[11px] pb-2 border-b border-white/5">
+            <span>Cost of Goods Sold (COGS)</span>
+            <span>Amount</span>
+          </div>
+          <div className="py-2 space-y-1.5 text-zinc-300">
+            {Array.isArray(data?.cogs_items) && data.cogs_items.map((item: any, idx: number) => (
+              <div key={idx} className="flex justify-between pl-3 hover:text-white">
+                <span className="text-zinc-400">{item.name}</span>
+                <span>{formatAmt(item.amount)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-between font-bold text-white pt-2 border-t border-white/5 bg-zinc-900/40 px-3 py-1.5 rounded-lg">
+            <span>Total COGS</span>
+            <span>{formatAmt(cogs)}</span>
+          </div>
+        </div>
 
-              {/* GROSS PROFIT HIGHLIGHT ROW */}
-              <tr className="bg-indigo-950/50 font-bold text-indigo-200 border-y border-indigo-500/30">
-                <td className="py-3 px-6 text-sm">GROSS PROFIT</td>
-                <td className="py-3 px-6 text-right font-mono text-sm text-indigo-300">
-                  {renderAmount(data.grossProfit)}
-                </td>
-              </tr>
+        {/* Gross Profit Subtotal */}
+        <div className="flex justify-between font-extrabold text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 rounded-xl">
+          <span>GROSS PROFIT</span>
+          <span>{formatAmt(gp)}</span>
+        </div>
 
-              {/* 3. OPERATING EXPENSES (OPEX) */}
-              <tr className="bg-zinc-900/60 font-semibold text-white">
-                <td className="py-2.5 px-6" colSpan={2}>
-                  Operating Expenses (OpEx)
-                </td>
-              </tr>
-              {data.operatingExpenses.map((row) => (
-                <tr key={row.id} className="hover:bg-white/5 transition-colors">
-                  <td className="py-2 px-6 text-zinc-300 pl-10 font-mono">
-                    {row.accountCode && <span className="text-zinc-500 mr-2">{row.accountCode}</span>}
-                    {row.accountName}
-                  </td>
-                  <td className="py-2 px-6 text-right font-mono font-medium text-white">
-                    {renderAmount(row.amount)}
-                  </td>
-                </tr>
-              ))}
-              <tr className="bg-zinc-900 font-bold border-t border-white/10">
-                <td className="py-2.5 px-6 text-white">Total Operating Expenses</td>
-                <td className="py-2.5 px-6 text-right font-mono text-amber-400">
-                  {renderAmount(data.totalOperatingExpenses)}
-                </td>
-              </tr>
+        {/* 3. OpEx Tier */}
+        <div>
+          <div className="flex justify-between font-bold text-zinc-400 uppercase text-[11px] pb-2 border-b border-white/5">
+            <span>Operating Expenses (OpEx)</span>
+            <span>Amount</span>
+          </div>
+          <div className="py-2 space-y-1.5 text-zinc-300">
+            {Array.isArray(data?.opex_items) && data.opex_items.map((item: any, idx: number) => (
+              <div key={idx} className="flex justify-between pl-3 hover:text-white">
+                <span className="text-zinc-400">{item.name}</span>
+                <span>{formatAmt(item.amount)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-between font-bold text-white pt-2 border-t border-white/5 bg-zinc-900/40 px-3 py-1.5 rounded-lg">
+            <span>Total Operating Expenses</span>
+            <span>{formatAmt(opex)}</span>
+          </div>
+        </div>
 
-              {/* NET INCOME FINAL ROW */}
-              <tr className="bg-zinc-900 font-extrabold text-white text-sm border-t-2 border-white/20">
-                <td className="py-3.5 px-6 tracking-wide">NET OPERATING INCOME</td>
-                <td className="py-3.5 px-6 text-right font-mono text-emerald-400">
-                  {renderAmount(data.netIncome)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        {/* Net Operating Income / EBITDA */}
+        <div className="flex justify-between font-extrabold text-sm text-white bg-indigo-600/20 border border-indigo-500/30 px-3.5 py-2.5 rounded-xl">
+          <span>NET OPERATING INCOME (EBITDA)</span>
+          <span className={ebitda >= 0 ? "text-emerald-400" : "text-rose-400"}>
+            {formatAmt(ebitda)}
+          </span>
         </div>
       </CardContent>
     </Card>
   );
 }
+
+export default IncomeStatementTable;

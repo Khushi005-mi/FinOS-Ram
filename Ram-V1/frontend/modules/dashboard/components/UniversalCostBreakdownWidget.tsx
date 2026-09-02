@@ -1,118 +1,93 @@
 "use client";
 
 import React from "react";
-import { UniversalCostBreakdown, IndustryType } from "../types/dashboardTypes";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui";
-import { formatCurrency } from "@/lib/formatters";
 
-interface UniversalCostBreakdownWidgetProps {
-  data?: UniversalCostBreakdown | any;
+interface CostBreakdownProps {
+  data?: any;
   currency?: string;
 }
 
-const INDUSTRY_TITLES: Record<string, { title: string; subtitle: string }> = {
-  MANUFACTURING: {
-    title: "COGS Tri-Breakdown",
-    subtitle: "Raw Materials, Factory Labor, and Plant Overhead",
-  },
-  ECOMMERCE_RETAIL: {
-    title: "Direct Cost of Sales Breakdown",
-    subtitle: "Product Sourcing, Shipping/Logistics, and Ad Spend",
-  },
-  SERVICES_AGENCY: {
-    title: "Operating Cost Breakdown",
-    subtitle: "Direct Project Payroll, Software Tools, and Admin OpEx",
-  },
-  GENERAL_SMB: {
-    title: "Direct Expenses vs. Operating Expenses",
-    subtitle: "Direct Sales Cost, Marketing, and Administrative Expenses",
-  },
+const CATEGORY_COLORS: Record<string, string> = {
+  "Direct Raw Materials": "bg-indigo-500",
+  "Direct Labor / Payroll": "bg-emerald-500",
+  "Overhead & Facilities": "bg-amber-500",
 };
 
-export function UniversalCostBreakdownWidget({ data, currency = "INR" }: UniversalCostBreakdownWidgetProps) {
-  const industryType: IndustryType = data?.industryType || data?.industry_type || "MANUFACTURING";
-  const totalCost = Number(data?.totalCost ?? data?.total_cost ?? data?.total_cogs ?? 0);
+export function UniversalCostBreakdownWidget({ data, currency = "INR" }: CostBreakdownProps) {
+  const totalCogs = Number(data?.total_cogs ?? data?.totalCost ?? 0);
+  const formattedTotal = data?.total_cogs_formatted || `₹${totalCogs.toLocaleString("en-IN")}`;
 
-  // Map the backend's real field names (direct_materials, direct_labor,
-  // factory_overhead) into the {label, amount, percentage, color} shape
-  // this component renders. Falls back to an explicit "buckets" array
-  // if the backend ever sends one directly.
-  const rawBuckets = data?.buckets && data.buckets.length > 0
-    ? data.buckets
-    : (data?.total_cogs !== undefined
-        ? [
-            {
-              label: "Direct Raw Materials",
-              amount: data?.direct_materials ?? 0,
-              percentage: data?.direct_materials_pct ?? 0,
-              color: "bg-indigo-600",
-            },
-            {
-              label: "Direct Labor / Payroll",
-              amount: data?.direct_labor ?? 0,
-              percentage: data?.direct_labor_pct ?? 0,
-              color: "bg-emerald-500",
-            },
-            {
-              label: "Overhead & Facilities",
-              amount: data?.factory_overhead ?? 0,
-              percentage: data?.factory_overhead_pct ?? 0,
-              color: "bg-amber-500",
-            },
-          ]
-        : []);
+  // Direct resolution from backend breakdown array
+  const rawBreakdown = Array.isArray(data?.breakdown) ? data.breakdown : [];
 
-  const buckets = rawBuckets;
-  const { title, subtitle } = INDUSTRY_TITLES[industryType] || INDUSTRY_TITLES.GENERAL_SMB;
+  const items = [
+    {
+      label: "Direct Raw Materials",
+      amount: Number(rawBreakdown.find((b: any) => b.category === "Direct Raw Materials")?.amount ?? data?.materials_costs ?? 0),
+      percentage: Number(rawBreakdown.find((b: any) => b.category === "Direct Raw Materials")?.percentage ?? 0),
+      color: "bg-indigo-500",
+    },
+    {
+      label: "Direct Labor / Payroll",
+      amount: Number(rawBreakdown.find((b: any) => b.category === "Direct Labor / Payroll")?.amount ?? data?.labor_costs ?? 0),
+      percentage: Number(rawBreakdown.find((b: any) => b.category === "Direct Labor / Payroll")?.percentage ?? 0),
+      color: "bg-emerald-500",
+    },
+    {
+      label: "Overhead & Facilities",
+      amount: Number(rawBreakdown.find((b: any) => b.category === "Overhead & Facilities")?.amount ?? data?.overhead_costs ?? 0),
+      percentage: Number(rawBreakdown.find((b: any) => b.category === "Overhead & Facilities")?.percentage ?? 0),
+      color: "bg-amber-500",
+    },
+  ];
 
   return (
-    <Card className="apple-glass">
-      <CardHeader>
-        <CardTitle className="text-white text-base font-semibold">
-          {title}
+    <Card className="apple-glass border-white/10">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-white text-sm font-semibold tracking-tight">
+          COGS Tri-Breakdown
         </CardTitle>
-        <p className="text-xs text-zinc-400 mt-0.5">{subtitle}</p>
+        <p className="text-[11px] text-zinc-400 mt-0.5">
+          Raw Materials, Factory Labor, and Plant Overhead.
+        </p>
       </CardHeader>
 
-      <CardContent className="space-y-6">
-        {/* Total Cost Summary Box */}
-        <div className="bg-zinc-900/80 p-4 rounded-xl border border-white/10">
-          <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
-            Total Operating Expense
+      <CardContent className="space-y-5">
+        {/* Total Cost Box */}
+        <div className="bg-zinc-900/80 p-4 rounded-xl border border-white/5">
+          <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+            Total Cost of Goods Sold (COGS)
           </p>
-          <p className="text-2xl font-extrabold text-white mt-1">
-            {formatCurrency(totalCost, currency)}
+          <p className="text-2xl font-extrabold text-white mt-1 font-mono">
+            {formattedTotal}
           </p>
         </div>
 
         {/* Stacked Progress Bar */}
-        <div className="w-full h-2.5 bg-zinc-900 rounded-full overflow-hidden flex ring-1 ring-white/10">
-          {buckets.map((bucket: any, idx: number) => {
-            const pct = bucket?.percentage ?? 0;
-            return (
-              <div
-                key={idx}
-                className={`h-full ${bucket?.color || "bg-indigo-600"}`}
-                style={{ width: `${pct}%` }}
-              />
-            );
-          })}
+        <div className="w-full h-2 bg-zinc-900 rounded-full overflow-hidden flex ring-1 ring-white/5">
+          {items.map((item, idx) => (
+            <div
+              key={idx}
+              className={`h-full ${item.color} transition-all duration-300`}
+              style={{ width: `${item.percentage}%` }}
+            />
+          ))}
         </div>
 
-        {/* Buckets Breakdown List */}
-        <div className="space-y-3">
-          {buckets.map((bucket: any, idx: number) => {
-            const amt = Number(bucket?.amount ?? 0);
-            const pct = bucket?.percentage ?? "0";
+        {/* Breakdown Sub-Items */}
+        <div className="space-y-2.5">
+          {items.map((item, idx) => {
+            const formattedAmt = `₹${item.amount.toLocaleString("en-IN")}`;
             return (
               <div key={idx} className="flex items-center justify-between text-xs">
-                <div className="flex items-center space-x-2.5">
-                  <span className={`w-2 h-2 rounded-full ${bucket?.color || "bg-indigo-600"}`} />
-                  <span className="font-medium text-zinc-300">{bucket?.label || "Category"}</span>
+                <div className="flex items-center space-x-2">
+                  <span className={`w-2 h-2 rounded-full ${item.color}`} />
+                  <span className="font-medium text-zinc-300">{item.label}</span>
                 </div>
-                <div className="text-right">
-                  <span className="font-bold text-white">{formatCurrency(amt, currency)}</span>
-                  <span className="text-zinc-500 ml-2 font-mono">({pct}%)</span>
+                <div className="text-right font-mono">
+                  <span className="font-bold text-white">{formattedAmt}</span>
+                  <span className="text-zinc-500 ml-1.5 text-[11px]">({item.percentage}%)</span>
                 </div>
               </div>
             );
@@ -122,3 +97,5 @@ export function UniversalCostBreakdownWidget({ data, currency = "INR" }: Univers
     </Card>
   );
 }
+
+export default UniversalCostBreakdownWidget;

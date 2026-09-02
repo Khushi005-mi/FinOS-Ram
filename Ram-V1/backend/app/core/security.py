@@ -1,21 +1,18 @@
 """
 backend/app/core/security.py
 
-Authentication & Multi-Tenant Security Gate:
-- Validates JWT Bearer tokens when present
-- Gracefully falls back to default tenant profile for seamless local testing & SSR data fetches
+Native Bcrypt Hashing & JWT Security Gate (Python 3.13 Compatible).
 """
 from datetime import datetime, timedelta
 from typing import Optional, Any
-from fastapi import Depends, HTTPException, status
+import bcrypt
+from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel
-import uuid
 
 from app.core.config import settings
 
-# auto_error=False allows requests without Bearer tokens to fall back safely
 reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/auth/login",
     auto_error=False,
@@ -27,6 +24,23 @@ class TokenData(BaseModel):
     organization_id: str = "00000000-0000-0000-0000-000000000001"
     email: Optional[str] = "cfo@apexmanufacturing.com"
     role: Optional[str] = "ADMIN"
+
+
+def get_password_hash(password: str) -> str:
+    """Hashes a plaintext password using native bcrypt."""
+    pwd_bytes = password.encode("utf-8")[:72]
+    salt = bcrypt.gensalt(rounds=12)
+    return bcrypt.hashpw(pwd_bytes, salt).decode("utf-8")
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verifies a plaintext password against a stored bcrypt hash."""
+    try:
+        pwd_bytes = plain_password.encode("utf-8")[:72]
+        hash_bytes = hashed_password.encode("utf-8")
+        return bcrypt.checkpw(pwd_bytes, hash_bytes)
+    except Exception:
+        return False
 
 
 def create_access_token(subject: str, organization_id: str, expires_delta: Optional[timedelta] = None) -> str:

@@ -7,22 +7,28 @@ from sqlalchemy import select
 
 from app.api.router import api_router
 from app.core.config import settings
+from app.core.security import get_password_hash
 from app.db.base import Base
 from app.db.models.organization import Organization
+from app.db.models.user import User
 from app.db.session import AsyncSessionLocal, engine
 import app.db.models
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    print(f"🚀 Starting {settings.PROJECT_NAME} (v{settings.VERSION})...")
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+        print("✓ Database tables verified and ready!")
+
         async with AsyncSessionLocal() as db:
             org_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
-            stmt = select(Organization).where(Organization.id == org_id)
-            res = await db.execute(stmt)
-            if not res.scalar_one_or_none():
+            
+            # Seed Demo Org
+            org = (await db.execute(select(Organization).where(Organization.id == org_id))).scalar_one_or_none()
+            if not org:
                 db.add(
                     Organization(
                         id=org_id,
@@ -35,9 +41,30 @@ async def lifespan(app: FastAPI):
                     )
                 )
                 await db.commit()
+
+            # Seed Demo User with native bcrypt
+            demo_email = "cfo@apexmanufacturing.com"
+            user = (await db.execute(select(User).where(User.email == demo_email))).scalar_one_or_none()
+            if not user:
+                db.add(
+                    User(
+                        id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+                        organization_id=org_id,
+                        email=demo_email,
+                        hashed_password=get_password_hash("admin123"),
+                        full_name="Executive CFO",
+                        role="OWNER",
+                        is_active=True,
+                    )
+                )
+                await db.commit()
+                print("✓ Auto-seeded Demo User (cfo@apexmanufacturing.com / admin123)!")
+
     except Exception as err:
-        print(f"Lifespan DB init warning: {err}")
+        print(f"⚠️ Lifespan DB init warning: {err}")
+
     yield
+    print(f"🛑 Shutting down {settings.PROJECT_NAME} cleanly...")
 
 
 app = FastAPI(
@@ -50,7 +77,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Explicit allowed origins matching exact deployment domains
 ALLOWED_ORIGINS = [
     "https://finos-frontend-ui.onrender.com",
     "https://finos-ram.onrender.com",

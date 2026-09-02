@@ -2,124 +2,91 @@
 
 import React from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui";
-import { formatCurrency } from "@/lib/formatters";
 
 interface BalanceSheetTableProps {
+  data?: any;
   currency?: string;
 }
 
-export function BalanceSheetTable({ currency = "INR" }: BalanceSheetTableProps) {
-  const assets = [
-    { code: "1010", name: "Operating Cash & Bank Balance", amount: 2450000 },
-    { code: "1200", name: "Accounts Receivable (Trade)", amount: 1800000 },
-    { code: "1400", name: "Raw Material & Finished Goods Inventory", amount: 3200000 },
-    { code: "1700", name: "Plant Machinery & Equipment (Net)", amount: 6500000 },
-  ];
+export function BalanceSheetTable({ data, currency = "INR" }: BalanceSheetTableProps) {
+  const totalAssets = Number(data?.total_assets ?? 0);
+  const totalLiabilities = Number(data?.total_liabilities ?? 0);
+  const totalEquity = Number(data?.total_equity ?? 0);
+  const isBalanced = Boolean(data?.is_balanced);
 
-  const liabilities = [
-    { code: "2010", name: "Accounts Payable (Suppliers)", amount: 1400000 },
-    { code: "2200", name: "Short-Term Working Capital Loan", amount: 1100000 },
-    { code: "2500", name: "Long-Term Equipment Financing", amount: 2800000 },
-  ];
-
-  const equity = [
-    { code: "3010", name: "Paid-in Founder Equity", amount: 5000000 },
-    { code: "3300", name: "Retained Earnings", amount: 3650000 },
-  ];
-
-  const totalAssets = assets.reduce((s, a) => s + a.amount, 0);
-  const totalLiabilities = liabilities.reduce((s, l) => s + l.amount, 0);
-  const totalEquity = equity.reduce((s, e) => s + e.amount, 0);
-  const totalLiabilitiesAndEquity = totalLiabilities + totalEquity;
-
-  const renderAmount = (amount: number) => formatCurrency(amount, currency);
+  const formatAmt = (val: number) => `₹${val.toLocaleString("en-IN")}`;
 
   return (
-    <Card className="w-full apple-glass border-white/10">
-      <CardHeader className="border-b border-white/10 pb-4">
-        <CardTitle className="text-white text-lg font-bold">
-          Statement of Financial Position (Balance Sheet)
-        </CardTitle>
-        <p className="text-xs text-zinc-400 mt-0.5">
-          Assets = Liabilities + Owner Equity Verification ({currency})
-        </p>
+    <Card className="apple-glass border-white/10">
+      <CardHeader className="border-b border-white/5 pb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-white text-base font-bold">
+              Balance Sheet Statement
+            </CardTitle>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Financial position: Assets = Liabilities + Stockholder's Equity.
+            </p>
+          </div>
+          <span
+            className={`text-xs font-mono font-bold px-2.5 py-1 rounded-full border ${
+              isBalanced
+                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                : "bg-zinc-800 text-zinc-400 border-zinc-700"
+            }`}
+          >
+            {isBalanced ? "Balanced Position" : "Active Ledger Position"}
+          </span>
+        </div>
       </CardHeader>
 
-      <CardContent className="pt-4 px-0">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-white/10 bg-zinc-900/80 text-zinc-400 font-semibold text-[11px]">
-                <th className="py-2.5 px-6">Account Code & Description</th>
-                <th className="py-2.5 px-6 text-right">Amount ({currency})</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5 text-zinc-300">
-              {/* ASSETS SECTION */}
-              <tr className="bg-zinc-900/60 font-semibold text-white">
-                <td className="py-2.5 px-6" colSpan={2}>Total Assets</td>
-              </tr>
-              {assets.map((item) => (
-                <tr key={item.code} className="hover:bg-white/5 transition-colors">
-                  <td className="py-2 px-6 text-zinc-300 pl-10 font-mono">
-                    <span className="text-zinc-500 mr-2">{item.code}</span>
-                    {item.name}
-                  </td>
-                  <td className="py-2 px-6 text-right font-mono font-medium text-white">
-                    {renderAmount(item.amount)}
-                  </td>
-                </tr>
-              ))}
-              <tr className="bg-emerald-950/40 font-bold text-emerald-200 border-y border-emerald-500/30">
-                <td className="py-3 px-6 text-sm">TOTAL ASSETS</td>
-                <td className="py-3 px-6 text-right font-mono text-sm text-emerald-400">
-                  {renderAmount(totalAssets)}
-                </td>
-              </tr>
+      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 font-mono text-xs">
+        {/* Assets Section */}
+        <div className="space-y-4">
+          <div className="flex justify-between font-bold text-zinc-400 uppercase text-[11px] pb-2 border-b border-white/5">
+            <span>Assets</span>
+            <span>Amount</span>
+          </div>
+          <div className="space-y-1.5 text-zinc-300">
+            {Array.isArray(data?.assets) && data.assets.length > 0 ? (
+              data.assets.map((item: any, idx: number) => (
+                <div key={idx} className="flex justify-between pl-3 hover:text-white">
+                  <span className="text-zinc-400">{item.name}</span>
+                  <span>{formatAmt(item.amount)}</span>
+                </div>
+              ))
+            ) : (
+              <p className="text-zinc-600 pl-3 italic">Derived from operational cash reserves</p>
+            )}
+          </div>
+          <div className="flex justify-between font-bold text-white pt-2 border-t border-white/5 bg-zinc-900/40 px-3 py-1.5 rounded-lg">
+            <span>Total Assets</span>
+            <span>{formatAmt(totalAssets)}</span>
+          </div>
+        </div>
 
-              {/* LIABILITIES SECTION */}
-              <tr className="bg-zinc-900/60 font-semibold text-white">
-                <td className="py-2.5 px-6" colSpan={2}>Total Liabilities</td>
-              </tr>
-              {liabilities.map((item) => (
-                <tr key={item.code} className="hover:bg-white/5 transition-colors">
-                  <td className="py-2 px-6 text-zinc-300 pl-10 font-mono">
-                    <span className="text-zinc-500 mr-2">{item.code}</span>
-                    {item.name}
-                  </td>
-                  <td className="py-2 px-6 text-right font-mono font-medium text-white">
-                    {renderAmount(item.amount)}
-                  </td>
-                </tr>
-              ))}
-
-              {/* EQUITY SECTION */}
-              <tr className="bg-zinc-900/60 font-semibold text-white">
-                <td className="py-2.5 px-6" colSpan={2}>Stockholder Equity</td>
-              </tr>
-              {equity.map((item) => (
-                <tr key={item.code} className="hover:bg-white/5 transition-colors">
-                  <td className="py-2 px-6 text-zinc-300 pl-10 font-mono">
-                    <span className="text-zinc-500 mr-2">{item.code}</span>
-                    {item.name}
-                  </td>
-                  <td className="py-2 px-6 text-right font-mono font-medium text-white">
-                    {renderAmount(item.amount)}
-                  </td>
-                </tr>
-              ))}
-
-              {/* TOTAL LIABILITIES & EQUITY */}
-              <tr className="bg-zinc-900 font-extrabold text-white text-sm border-t-2 border-white/20">
-                <td className="py-3.5 px-6">TOTAL LIABILITIES & EQUITY</td>
-                <td className="py-3.5 px-6 text-right font-mono text-emerald-400">
-                  {renderAmount(totalLiabilitiesAndEquity)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        {/* Liabilities & Equity Section */}
+        <div className="space-y-4">
+          <div className="flex justify-between font-bold text-zinc-400 uppercase text-[11px] pb-2 border-b border-white/5">
+            <span>Liabilities & Equity</span>
+            <span>Amount</span>
+          </div>
+          <div className="space-y-1.5 text-zinc-300">
+            {Array.isArray(data?.liabilities) && data.liabilities.map((item: any, idx: number) => (
+              <div key={idx} className="flex justify-between pl-3 hover:text-white">
+                <span className="text-zinc-400">{item.name}</span>
+                <span>{formatAmt(item.amount)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-between font-bold text-white pt-2 border-t border-white/5 bg-zinc-900/40 px-3 py-1.5 rounded-lg">
+            <span>Total Liabilities & Equity</span>
+            <span>{formatAmt(totalLiabilities + totalEquity)}</span>
+          </div>
         </div>
       </CardContent>
     </Card>
   );
 }
+
+export default BalanceSheetTable;

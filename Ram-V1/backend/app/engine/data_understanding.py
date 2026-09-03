@@ -1,9 +1,8 @@
 """
 backend/app/engine/data_understanding.py
 
-STATION 1: Autonomous Data Understanding Engine
-Inspects raw tabular matrices prior to mutation to determine structural boundaries,
-header locations, semantic column assignments, regional formatting, and dataset topology.
+STAGE 1: Autonomous Data Understanding Engine
+Guarantees 100% type-safety against NaN floats in empty cells.
 """
 from dataclasses import dataclass, field
 import re
@@ -14,35 +13,35 @@ import pandas as pd
 @dataclass
 class ColumnSemantics:
     original_name: str
-    inferred_role: str  # DATE, ACCOUNT_NAME, ACCOUNT_CODE, DEBIT, CREDIT, AMOUNT, REFERENCE, UNKNOWN
-    confidence: float   # 0.0 to 1.0
-    detected_data_type: str  # date, numeric, text, empty
+    inferred_role: str
+    confidence: float
+    detected_data_type: str
     sample_values: List[str] = field(default_factory=list)
 
 
 @dataclass
 class DatasetTopologyProfile:
-    topology_type: str  # DOUBLE_ENTRY_GL, SINGLE_ENTRY_STATEMENT, WIDE_PIVOTED_PNL, FLAT_INVOICE_LOG
+    topology_type: str
     header_row_index: int
     data_start_row: int
     data_end_row: int
     total_raw_rows: int
     total_raw_cols: int
     detected_currency: str
-    detected_number_format: str  # INDIAN_LAKHS, EUROPEAN, STANDARD
+    detected_number_format: str
     column_semantics: Dict[str, ColumnSemantics] = field(default_factory=dict)
     metadata_banner_rows: List[int] = field(default_factory=list)
 
 
 class DataUnderstandingEngine:
     ROLE_PATTERNS = {
-        "DATE": re.compile(r"\b(?:date|txn date|trans date|post date|value date|booking date|voucher date|period|month|day)\b", re.IGNORECASE),
-        "ACCOUNT_NAME": re.compile(r"\b(?:account|particulars|description|narration|ledger|party|vendor|customer|payee|item|details|entity|head|ledger head)\b", re.IGNORECASE),
-        "ACCOUNT_CODE": re.compile(r"\b(?:code|gl code|acct code|acc no|account no|gl|hsn|sac|sku|code)\b", re.IGNORECASE),
+        "DATE": re.compile(r"\b(?:date|txn date|trans date|post date|value date|booking date|voucher date|period|month|day|due date|paid date)\b", re.IGNORECASE),
+        "ACCOUNT_NAME": re.compile(r"\b(?:account|particulars|description|narration|ledger|party|vendor|customer|payee|item|details|entity|head|ledger head|customer id|status)\b", re.IGNORECASE),
+        "ACCOUNT_CODE": re.compile(r"\b(?:code|gl code|acct code|acc no|account no|gl|hsn|sac|sku|invoice id|inv id)\b", re.IGNORECASE),
         "DEBIT": re.compile(r"\b(?:debit|dr|withdrawal|outflow|payment|spend|charge|expense|money out|paid out)\b", re.IGNORECASE),
         "CREDIT": re.compile(r"\b(?:credit|cr|deposit|inflow|receipt|income|sales|money in|paid in)\b", re.IGNORECASE),
-        "AMOUNT": re.compile(r"\b(?:amount|net amount|total amount|value|line total|taxable value|figure|balance|net)\b", re.IGNORECASE),
-        "REFERENCE": re.compile(r"\b(?:ref|reference|voucher|invoice|inv no|txn id|doc no|bill no|order id|chq no)\b", re.IGNORECASE),
+        "AMOUNT": re.compile(r"\b(?:amount|net amount|total amount|value|line total|taxable value|figure|balance|net|invoice amount)\b", re.IGNORECASE),
+        "REFERENCE": re.compile(r"\b(?:ref|reference|voucher|invoice|inv no|txn id|doc no|bill no|order id|chq no|invoice id)\b", re.IGNORECASE),
     }
 
     SUMMARY_PATTERNS = re.compile(r"\b(?:grand total|subtotal|sub total|total summary|closing balance|balance c/f)\b", re.IGNORECASE)
@@ -50,26 +49,14 @@ class DataUnderstandingEngine:
 
     @classmethod
     def analyze_raw_matrix(cls, df_raw: pd.DataFrame) -> DatasetTopologyProfile:
-        """Executes non-destructive structural analysis on the raw matrix."""
         if df_raw.empty:
             return cls._empty_profile(df_raw)
 
-        # 1. Locate the true header row index (skipping top metadata banners)
         header_idx, banner_rows = cls._find_header_row(df_raw)
-
-        # 2. Extract working table using detected header
         working_df = cls._align_table_headers(df_raw, header_idx)
-
-        # 3. Locate data boundaries (where real rows start and where footers/totals begin)
         start_row, end_row = cls._find_data_boundaries(working_df)
-
-        # 4. Profile column semantics and data types
         col_semantics = cls._profile_column_semantics(working_df.iloc[start_row:end_row])
-
-        # 5. Detect regional number format & currency
         num_format, currency = cls._detect_regional_formats(working_df.iloc[start_row:end_row])
-
-        # 6. Classify dataset topology
         topology = cls._classify_topology(col_semantics, working_df.iloc[start_row:end_row])
 
         return DatasetTopologyProfile(
@@ -87,27 +74,23 @@ class DataUnderstandingEngine:
 
     @classmethod
     def _find_header_row(cls, df: pd.DataFrame) -> Tuple[int, List[int]]:
-        """Detects header row by scoring text density and financial keyword matches."""
         banner_rows = []
         best_row_idx = 0
         best_score = -1.0
 
         scan_depth = min(10, len(df))
         for idx in range(scan_depth):
-            raw_values = df.iloc[idx].dropna().astype(str).tolist()
+            raw_values = [str(v).strip() for v in df.iloc[idx].values if pd.notna(v) and str(v).strip() != ""]
             if not raw_values:
                 banner_rows.append(idx)
                 continue
 
-            # Normalize underscores and hyphens to spaces for regex word boundaries
             row_normalized = [re.sub(r"[_\-\.]+", " ", v).strip() for v in raw_values]
             row_str = " ".join(row_normalized)
 
-            # Disqualify summary rows from being headers
             if cls.SUMMARY_PATTERNS.search(row_str):
                 continue
 
-            # Calculate keyword match score
             matches = 0
             for val in row_normalized:
                 for pattern in cls.ROLE_PATTERNS.values():
@@ -115,7 +98,6 @@ class DataUnderstandingEngine:
                         matches += 1
                         break
 
-            # Headers contain text strings, not pure numbers
             text_cells = sum(1 for v in raw_values if not re.match(r"^[\d\.,\s\(\)-]+$", v))
             score = (matches * 3.0) + (text_cells / len(raw_values) if raw_values else 0)
 
@@ -130,7 +112,11 @@ class DataUnderstandingEngine:
 
     @classmethod
     def _align_table_headers(cls, df: pd.DataFrame, header_idx: int) -> pd.DataFrame:
-        """Promotes detected header row to DataFrame column names."""
+        if header_idx == 0:
+            aligned = df.copy()
+            aligned.columns = [str(c).strip() if pd.notna(c) and str(c).strip() != "" else f"col_{i+1}" for i, c in enumerate(df.columns)]
+            return aligned
+
         aligned = df.iloc[header_idx + 1:].copy().reset_index(drop=True)
         aligned.columns = [
             str(c).strip() if pd.notna(c) and str(c).strip() != "" else f"col_{i+1}"
@@ -140,12 +126,12 @@ class DataUnderstandingEngine:
 
     @classmethod
     def _find_data_boundaries(cls, df: pd.DataFrame) -> Tuple[int, int]:
-        """Detects where real records stop and trailing summaries/footers begin."""
         start_row = 0
         end_row = len(df)
 
         for idx in range(len(df) - 1, -1, -1):
-            row_str = " ".join(df.iloc[idx].dropna().astype(str).values).lower()
+            row_vals = [str(v).lower() for v in df.iloc[idx].values if pd.notna(v)]
+            row_str = " ".join(row_vals)
             if any(k in row_str for k in ["grand total", "subtotal", "total summary", "audited by", "disclaimer"]):
                 end_row = idx
             else:
@@ -155,26 +141,23 @@ class DataUnderstandingEngine:
 
     @classmethod
     def _profile_column_semantics(cls, df: pd.DataFrame) -> Dict[str, ColumnSemantics]:
-        """Classifies each column's semantic role using header matching + cell distribution."""
         semantics = {}
 
         for col in df.columns:
             col_str = str(col).strip()
             col_normalized = re.sub(r"[_\-\.]+", " ", col_str).strip()
-            sample = df[col].dropna().head(20).astype(str).tolist()
+            sample = [str(v).strip() for v in df[col].dropna().head(20).values if pd.notna(v) and str(v).strip() != ""]
 
             inferred_role = "UNKNOWN"
             confidence = 0.0
             data_type = "empty"
 
-            # 1. Header Pattern Scoring
             for role, pattern in cls.ROLE_PATTERNS.items():
                 if pattern.search(col_normalized):
                     inferred_role = role
                     confidence = 0.85
                     break
 
-            # 2. Data-Type Distribution Inspection
             if sample:
                 if inferred_role in ["UNKNOWN", "DATE"]:
                     date_matches = sum(1 for v in sample if cls.DATE_DELIMITERS.search(v) and len(v) >= 6)
@@ -214,8 +197,8 @@ class DataUnderstandingEngine:
 
     @classmethod
     def _detect_regional_formats(cls, df: pd.DataFrame) -> Tuple[str, str]:
-        """Detects regional number formatting (Indian Lakhs vs. European vs. Standard) and Currency."""
-        text_dump = " ".join(df.astype(str).values.flatten())
+        safe_strings = [str(v) for v in df.values.flatten() if pd.notna(v) and str(v).strip() != ""]
+        text_dump = " ".join(safe_strings)
 
         currency = "INR"
         if "$" in text_dump or "USD" in text_dump:
@@ -237,7 +220,6 @@ class DataUnderstandingEngine:
 
     @classmethod
     def _classify_topology(cls, semantics: Dict[str, ColumnSemantics], df: pd.DataFrame) -> str:
-        """Determines if the financial matrix is a Double-Entry GL, Statement, or P&L."""
         roles = [s.inferred_role for s in semantics.values()]
 
         has_debit = "DEBIT" in roles

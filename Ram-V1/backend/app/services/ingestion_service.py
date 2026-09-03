@@ -1,15 +1,15 @@
 """
 backend/app/services/ingestion_service.py
 
-SARTUS Finovate Ingestion Service:
-Coordinates raw parsing, autonomous data sanitization, schema mapping,
-synthetic auto-balancing, and atomic PostgreSQL persistence.
+STATION 6: Master Ingestion Service Orchestrator
+Connects Stations 1 through 5 into an atomic, observable execution pipeline:
+Parser -> Understanding -> Sanitization -> Standardization -> Quality Engine -> Reconciliation -> Database Persistence.
 """
 import json
 from datetime import date
 import uuid
 from decimal import Decimal
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from fastapi import UploadFile
 import pandas as pd
 from sqlalchemy import select
@@ -19,9 +19,11 @@ from app.db.models.journal_entry import JournalEntry
 from app.db.models.organization import Organization
 from app.db.models.upload_batch import UploadBatch
 from app.engine.parser import FileParsingError, parse_file_stream
-from app.engine.sanitizer import DataSanitizer
-from app.engine.mapper import auto_map_columns, map_and_normalize_dataframe
-from app.engine.validator import validate_ledger_dataframe
+from app.engine.data_understanding import DataUnderstandingEngine
+from app.engine.structural_sanitizer import StructuralSanitizerEngine
+from app.engine.standardizer import FinancialStandardizerEngine
+from app.engine.quality_engine import DataQualityEngine
+from app.engine.reconciliation import AccountingReconciliationEngine
 
 
 def _to_uuid(val: Any) -> uuid.UUID:
@@ -48,8 +50,9 @@ class IngestionService:
     async def process_batch(
         db: AsyncSession,
         files: List[UploadFile],
-        raw_metadata: str,
-        organization_id: Any,
+        raw_metadata: str = "[]",
+        organization_id: Any = "00000000-0000-0000-0000-000000000001",
+        auto_balance: bool = True,
     ) -> Dict[str, Any]:
         try:
             metadata_list: List[Dict[str, Any]] = json.loads(raw_metadata) if raw_metadata else []
@@ -72,7 +75,8 @@ class IngestionService:
         await db.commit()
         await db.refresh(batch)
 
-        all_parsed_dfs: List[pd.DataFrame] = []
+        all_balanced_dfs: List[pd.DataFrame] = []
+        pipeline_audit_receipts: List[Dict[str, Any]] = []
 
         try:
             for file in files:
@@ -86,41 +90,58 @@ class IngestionService:
                     (m for m in metadata_list if m.get("fileName") == file.filename),
                     {},
                 )
-                column_mapping = file_meta.get("columnMapping", {})
+                custom_mapping = file_meta.get("columnMapping", {})
                 source_type = file_meta.get("sourceType", "GENERAL_LEDGER")
 
-                # Step 1: Raw Parser
+                # STAGE 1: Raw File Stream Parsing
                 raw_df = parse_file_stream(file.filename or "upload.csv", file_bytes)
                 if raw_df.empty:
                     continue
 
-                # Step 2: SARTUS Autonomous Data Sanitizer (De-noising, Subtotal Stripping)
-                sanitized_df = DataSanitizer.clean_raw_matrix(raw_df)
+                # STAGE 2: Autonomous Data Understanding
+                profile = DataUnderstandingEngine.analyze_raw_matrix(raw_df)
+
+                # STAGE 3: Structural Sanitization & De-noising
+                sanitized_df, s_receipt = StructuralSanitizerEngine.sanitize_matrix(raw_df, profile)
                 if sanitized_df.empty:
                     continue
 
-                # Step 3: Column Mapping & Canonical Normalization
-                if not column_mapping:
-                    column_mapping = auto_map_columns(list(sanitized_df.columns))
+                # STAGE 4: Financial Standardization & Canonical Schema Mapping
+                canonical_df, std_receipt = FinancialStandardizerEngine.standardize_to_canonical(
+                    sanitized_df, profile, custom_mapping=custom_mapping
+                )
+                canonical_df["source_type"] = source_type
 
-                mapped_df = map_and_normalize_dataframe(sanitized_df, column_mapping)
-                mapped_df["source_type"] = source_type
+                # STAGE 5: Data Quality Engine & Anomaly Audit
+                q_report = DataQualityEngine.audit_canonical_dataframe(canonical_df)
+                if not q_report.valid_records:
+                    raise ValueError(f"Data quality validation failed for {file.filename}: zero valid records.")
 
-                all_parsed_dfs.append(mapped_df)
-
-            if not all_parsed_dfs:
-                raise FileParsingError("No valid financial entries could be extracted from uploaded files.")
-
-            consolidated_df = pd.concat(all_parsed_dfs, ignore_index=True)
-
-            # Step 4: Accounting Invariant Validation
-            validation_result = validate_ledger_dataframe(consolidated_df)
-            if not validation_result.is_valid:
-                raise ValueError(
-                    f"Validation failed: {', '.join(validation_result.validation_errors)}"
+                # STAGE 6: Accounting Reconciliation & Double-Entry Balancing Gate
+                balanced_df, r_receipt = AccountingReconciliationEngine.reconcile_and_balance(
+                    canonical_df=canonical_df,
+                    dataset_id=batch_id_str,
+                    source_row_count=len(raw_df),
+                    auto_balance=auto_balance,
                 )
 
-            # Step 5: Convert DataFrame rows into JournalEntry ORM models
+                all_balanced_dfs.append(balanced_df)
+                pipeline_audit_receipts.append({
+                    "filename": file.filename,
+                    "original_rows": len(raw_df),
+                    "sanitized_rows": s_receipt["cleaned_rows"],
+                    "quality_score": q_report.quality_score,
+                    "quality_grade": q_report.quality_grade,
+                    "is_reconciled": r_receipt.is_reconciled,
+                    "clearing_offset": r_receipt.synthetic_offset_applied,
+                })
+
+            if not all_balanced_dfs:
+                raise FileParsingError("No valid financial entries could be extracted from uploaded files.")
+
+            consolidated_df = pd.concat(all_balanced_dfs, ignore_index=True)
+
+            # Convert DataFrame rows into JournalEntry ORM models
             journal_entries: List[JournalEntry] = []
             for _, row in consolidated_df.iterrows():
                 entry = JournalEntry(
@@ -143,7 +164,7 @@ class IngestionService:
             batch.status = "PROCESSED"
             batch.total_records_ingested = len(journal_entries)
 
-            # Step 6: Atomically set active dataset pointer
+            # Atomically update active batch pointer
             org_stmt = select(Organization).where(Organization.id == org_uuid)
             org_res = await db.execute(org_stmt)
             org = org_res.scalar_one_or_none()
@@ -159,6 +180,7 @@ class IngestionService:
                 "file_count": len(files),
                 "total_records_ingested": len(journal_entries),
                 "active_batch_id": batch_id_str,
+                "audit_summary": pipeline_audit_receipts,
             }
 
         except Exception as err:

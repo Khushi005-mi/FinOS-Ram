@@ -23,7 +23,7 @@ export function IncomeStatementTable({ data }: IncomeStatementTableProps) {
               Income Statement (Profit & Loss)
             </CardTitle>
             <p className="text-xs text-zinc-400 mt-0.5">
-              {data.organizationName} • Reporting Period: {data.periodName} ({currency})
+              {data?.organizationName || "FinOS Enterprise"} • Reporting Period: {data?.periodName || "Active Period"} ({currency})
             </p>
           </div>
         </div>
@@ -45,7 +45,7 @@ export function IncomeStatementTable({ data }: IncomeStatementTableProps) {
                   Operating Revenue
                 </td>
               </tr>
-              {data.revenue.map((row) => (
+              {(data?.revenue || []).map((row) => (
                 <tr key={row.id} className="hover:bg-white/5 transition-colors">
                   <td className="py-2 px-6 text-zinc-300 pl-10 font-mono">
                     {row.accountCode && <span className="text-zinc-500 mr-2">{row.accountCode}</span>}
@@ -59,7 +59,7 @@ export function IncomeStatementTable({ data }: IncomeStatementTableProps) {
               <tr className="bg-zinc-900 font-bold border-t border-white/10">
                 <td className="py-2.5 px-6 text-white">Total Operating Revenue</td>
                 <td className="py-2.5 px-6 text-right font-mono text-emerald-400">
-                  {renderAmount(data.totalRevenue)}
+                  {renderAmount(data?.totalRevenue ?? data?.total_revenue ?? 0)}
                 </td>
               </tr>
 
@@ -69,7 +69,7 @@ export function IncomeStatementTable({ data }: IncomeStatementTableProps) {
                   Cost of Goods / Direct Sales Expense
                 </td>
               </tr>
-              {data.costOfSales.map((row) => (
+              {(data?.costOfSales || data?.cost_of_sales || []).map((row) => (
                 <tr key={row.id} className="hover:bg-white/5 transition-colors">
                   <td className="py-2 px-6 text-zinc-300 pl-10 font-mono">
                     {row.accountCode && <span className="text-zinc-500 mr-2">{row.accountCode}</span>}
@@ -83,7 +83,7 @@ export function IncomeStatementTable({ data }: IncomeStatementTableProps) {
               <tr className="bg-zinc-900 font-bold border-t border-white/10">
                 <td className="py-2.5 px-6 text-white">Total Cost of Sales</td>
                 <td className="py-2.5 px-6 text-right font-mono text-rose-400">
-                  {renderAmount(data.totalCostOfSales)}
+                  {renderAmount(data?.totalCostOfSales ?? data?.total_cost_of_sales ?? 0)}
                 </td>
               </tr>
 
@@ -91,7 +91,7 @@ export function IncomeStatementTable({ data }: IncomeStatementTableProps) {
               <tr className="bg-indigo-950/50 font-bold text-indigo-200 border-y border-indigo-500/30">
                 <td className="py-3 px-6 text-sm">GROSS PROFIT</td>
                 <td className="py-3 px-6 text-right font-mono text-sm text-indigo-300">
-                  {renderAmount(data.grossProfit)}
+                  {renderAmount(data?.grossProfit ?? data?.gross_profit ?? 0)}
                 </td>
               </tr>
 
@@ -101,7 +101,7 @@ export function IncomeStatementTable({ data }: IncomeStatementTableProps) {
                   Operating Expenses (OpEx)
                 </td>
               </tr>
-              {data.operatingExpenses.map((row) => (
+              {(data?.operatingExpenses || data?.operating_expenses || []).map((row) => (
                 <tr key={row.id} className="hover:bg-white/5 transition-colors">
                   <td className="py-2 px-6 text-zinc-300 pl-10 font-mono">
                     {row.accountCode && <span className="text-zinc-500 mr-2">{row.accountCode}</span>}
@@ -115,7 +115,7 @@ export function IncomeStatementTable({ data }: IncomeStatementTableProps) {
               <tr className="bg-zinc-900 font-bold border-t border-white/10">
                 <td className="py-2.5 px-6 text-white">Total Operating Expenses</td>
                 <td className="py-2.5 px-6 text-right font-mono text-amber-400">
-                  {renderAmount(data.totalOperatingExpenses)}
+                  {renderAmount(data?.totalOperatingExpenses ?? data?.total_operating_expenses ?? 0)}
                 </td>
               </tr>
 
@@ -123,7 +123,7 @@ export function IncomeStatementTable({ data }: IncomeStatementTableProps) {
               <tr className="bg-zinc-900 font-extrabold text-white text-sm border-t-2 border-white/20">
                 <td className="py-3.5 px-6 tracking-wide">NET OPERATING INCOME</td>
                 <td className="py-3.5 px-6 text-right font-mono text-emerald-400">
-                  {renderAmount(data.netIncome)}
+                  {renderAmount(data?.netIncome ?? data?.net_income ?? 0)}
                 </td>
               </tr>
             </tbody>

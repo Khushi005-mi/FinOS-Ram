@@ -9,46 +9,44 @@ import {
 
 export const dashboardApi = {
   /**
-   * Fetches real summary financial metrics for active_batch_id from FastAPI backend.
+   * Fetches real summary financial metrics from FastAPI backend.
+   * Unwraps the production { success, data, error } envelope.
    */
   async getMetrics(): Promise<DashboardMetrics> {
-    try {
-      const response = await apiClient.get<DashboardMetrics>(API_ROUTES.DASHBOARD.METRICS);
-      
-      // 📸 CAMERA 5: WHAT DOES THE FRONTEND RECEIVE?
-      console.log("\n[FINOS TRACE 5] DASHBOARD API SUCCESS");
-      console.log("Real Data from Backend:", response.data);
-      
-      return response.data;
-    } catch (error) {
-      // 📸 CAMERA 6: IS THE FRONTEND FAKING AN ERROR?
-      console.error("\n[FINOS TRACE 6] DASHBOARD API FAILED!");
-      console.error("Error details:", error);
-      throw error;
-    }
+    const response = await apiClient.get<any>(API_ROUTES.DASHBOARD.METRICS);
+    const raw = response.data;
+    // Handle both enveloped { data: ... } and direct payloads
+    const payload = (raw && typeof raw === "object" && "data" in raw && raw.data) ? raw.data : raw;
+    return payload as DashboardMetrics;
   },
 
   /**
-   * Fetches real monthly trend points for active_batch_id from FastAPI backend.
+   * Fetches real monthly trend points from FastAPI backend.
    */
   async getMonthlyTrends(): Promise<MonthlyTrendPoint[]> {
-    const response = await apiClient.get<MonthlyTrendPoint[]>(API_ROUTES.DASHBOARD.TRENDS);
-    return response.data;
+    const response = await apiClient.get<any>(API_ROUTES.DASHBOARD.TRENDS);
+    const raw = response.data;
+    const payload = (raw && typeof raw === "object" && "data" in raw && Array.isArray(raw.data)) ? raw.data : (Array.isArray(raw) ? raw : []);
+    return payload as MonthlyTrendPoint[];
   },
 
   /**
-   * Fetches real COGS cost breakdown for active_batch_id from FastAPI backend.
+   * Fetches real COGS cost breakdown from FastAPI backend.
    */
   async getCostBreakdown(): Promise<UniversalCostBreakdown> {
-    const response = await apiClient.get<UniversalCostBreakdown>(API_ROUTES.ANALYTICS.COGS);
-    return response.data;
+    const response = await apiClient.get<any>(API_ROUTES.ANALYTICS.COGS);
+    const raw = response.data;
+    const payload = (raw && typeof raw === "object" && "data" in raw && raw.data) ? raw.data : raw;
+    return payload as UniversalCostBreakdown;
   },
 
   /**
-   * Fetches real CFO decision recommendations for active_batch_id from FastAPI backend.
+   * Fetches real CFO decision recommendations from FastAPI backend.
    */
   async getInsights(): Promise<ExecutiveInsight[]> {
-    const response = await apiClient.get<ExecutiveInsight[]>(API_ROUTES.ANALYTICS.INSIGHTS);
-    return response.data;
+    const response = await apiClient.get<any>(API_ROUTES.ANALYTICS.INSIGHTS);
+    const raw = response.data;
+    const payload = (raw && typeof raw === "object" && "data" in raw && Array.isArray(raw.data)) ? raw.data : (Array.isArray(raw) ? raw : []);
+    return payload as ExecutiveInsight[];
   },
 };

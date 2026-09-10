@@ -38,7 +38,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
 
         {error && (
           <p className="text-xs font-medium text-red-600 animate-in fade-in-50">
-            {error}
+            {typeof error === "string" ? error : (error?.message || JSON.stringify(error))}
           </p>
         )}
 

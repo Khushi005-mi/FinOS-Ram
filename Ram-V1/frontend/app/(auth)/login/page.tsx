@@ -2,8 +2,8 @@ import React from "react";
 import { LoginForm } from "@/modules/authentication/components/LoginForm";
 
 export const metadata = {
-  title: "Sign In - FinOS",
-  description: "Sign in to your FinOS account",
+  title: "Sign In - FinOS Enterprise",
+  description: "Sign in to your FinOS enterprise financial workspace",
 };
 
 export default function LoginPage() {

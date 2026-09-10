@@ -1,10 +1,7 @@
-"""
-backend/app/api/v1/dashboard.py
-"""
 import uuid
 from typing import Any, Dict, List
 import pandas as pd
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,13 +18,17 @@ from app.engine.financial_math import (
 router = APIRouter(prefix="/dashboard", tags=["Executive Dashboard"])
 
 
-def _to_uuid(val: Any) -> uuid.UUID:
+def _parse_uuid(val: Any, field_name: str) -> uuid.UUID:
+    """Strict UUID parser. Rejects invalid input without fallbacks."""
     if isinstance(val, uuid.UUID):
         return val
     try:
         return uuid.UUID(str(val))
-    except Exception:
-        return uuid.UUID("00000000-0000-0000-0000-000000000001")
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid {field_name} UUID format.",
+        )
 
 
 @router.get(
@@ -39,7 +40,7 @@ async def get_dashboard_metrics(
     db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(get_current_tenant_user),
 ) -> Dict[str, Any]:
-    org_id = _to_uuid(current_user.organization_id)
+    org_id = _parse_uuid(current_user.organization_id, "organization_id")
 
     org_stmt = select(Organization).where(Organization.id == org_id)
     org_result = await db.execute(org_stmt)
@@ -51,8 +52,12 @@ async def get_dashboard_metrics(
     if not raw_batch_id:
         return _get_empty_metrics(currency_code)
 
-    active_batch_uuid = _to_uuid(raw_batch_id)
+    try:
+        active_batch_uuid = uuid.UUID(str(raw_batch_id))
+    except ValueError:
+        active_batch_uuid = None
 
+    # Strict multi-tenant query: journal entries MUST match authenticated caller org_id
     stmt = (
         select(JournalEntry)
         .where(
@@ -94,7 +99,7 @@ async def get_monthly_trends_data(
     db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(get_current_tenant_user),
 ) -> List[Dict[str, Any]]:
-    org_id = _to_uuid(current_user.organization_id)
+    org_id = _parse_uuid(current_user.organization_id, "organization_id")
 
     org_stmt = select(Organization).where(Organization.id == org_id)
     org_result = await db.execute(org_stmt)
@@ -104,7 +109,10 @@ async def get_monthly_trends_data(
     if not raw_batch_id:
         return []
 
-    active_batch_uuid = _to_uuid(raw_batch_id)
+    try:
+        active_batch_uuid = uuid.UUID(str(raw_batch_id))
+    except ValueError:
+        active_batch_uuid = None
 
     stmt = (
         select(JournalEntry)

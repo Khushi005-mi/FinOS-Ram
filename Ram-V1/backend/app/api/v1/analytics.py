@@ -19,14 +19,11 @@ async def get_cogs_analytics(
     db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(get_current_tenant_user),
 ) -> Dict[str, Any]:
-    # Extract string organization_id for exact database column matching
-    organization_id = str(current_user.organization_id)
-
-    overview = await DashboardService.get_executive_overview(
+    cogs_data = await DashboardService.get_cogs_breakdown(
         db=db,
-        organization_id=organization_id,
+        organization_id=current_user.organization_id,
     )
-    return overview["cogs_breakdown"]
+    return {"success": True, "data": cogs_data, "error": None}
 
 
 @router.get(
@@ -37,11 +34,9 @@ async def get_cogs_analytics(
 async def get_cfo_insights_analytics(
     db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(get_current_tenant_user),
-) -> List[Dict[str, Any]]:
-    organization_id = str(current_user.organization_id)
-
-    overview = await DashboardService.get_executive_overview(
+) -> Dict[str, Any]:
+    insights_data = await DashboardService.get_cfo_insights(
         db=db,
-        organization_id=organization_id,
+        organization_id=current_user.organization_id,
     )
-    return overview["insights"]
+    return {"success": True, "data": insights_data, "error": None}

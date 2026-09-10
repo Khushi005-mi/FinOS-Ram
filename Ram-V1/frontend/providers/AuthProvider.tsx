@@ -1,79 +1,86 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { apiClient } from "@/lib/api/axios";
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  full_name?: string;
+  role: string;
+  organization_id: string;
+}
 
 interface AuthContextType {
-  user: any | null;
-  session: any | null;
+  user: UserProfile | null;
   isLoading: boolean;
   signOut: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
-  session: null,
   isLoading: true,
   signOut: async () => {},
+  refreshUser: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any | null>(null);
-  const [session, setSession] = useState<any | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  useEffect(() => {
-    if (!supabase || !supabase.auth) {
-      setIsLoading(false);
-      return;
-    }
-
-    // 1. Get initial active session
-    supabase.auth.getSession().then(({ data: { session: currentSession } }: any) => {
-      setSession(currentSession);
-      setUser(currentSession?.user ?? null);
-      if (currentSession?.access_token) {
-        localStorage.setItem("finos_auth_token", currentSession.access_token);
-      }
-      setIsLoading(false);
-    }).catch(() => {
-      setIsLoading(false);
-    });
-
-    // 2. Listen for auth state changes with explicit types
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      (event: any, currentSession: any) => {
-        setSession(currentSession);
-        setUser(currentSession?.user ?? null);
-
-        if (currentSession?.access_token) {
-          localStorage.setItem("finos_auth_token", currentSession.access_token);
-        } else {
-          localStorage.removeItem("finos_auth_token");
-        }
-
+  const fetchCurrentUser = async () => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("finos_auth_token") : null;
+      if (!token) {
+        setUser(null);
         setIsLoading(false);
+        return;
       }
-    );
 
-    return () => {
-      authListener?.subscription?.unsubscribe();
-    };
+      // Fetch authentic user profile from FastAPI backend
+      const response = await apiClient.get<UserProfile>("/auth/me");
+      setUser(response.data);
+    } catch {
+      // If token expired or invalid, purge and reset
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("finos_auth_token");
+      }
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCurrentUser();
   }, []);
 
   const signOut = async () => {
-    if (supabase?.auth) {
-      await supabase.auth.signOut();
+    try {
+      await apiClient.post("/auth/logout");
+    } catch {
+      // Ignore logout connection errors
+    } finally {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("finos_auth_token");
+        window.location.href = "/login";
+      }
+      setUser(null);
     }
-    localStorage.removeItem("finos_auth_token");
-    setUser(null);
-    setSession(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, isLoading, signOut }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        signOut,
+        refreshUser: fetchCurrentUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -1,0 +1,13 @@
+booking_date,code,item,debit,credit,invoice_id
+2026-01-01,S-100,Cash at Silicon Valley Bank,3000000.00,0.00,INV-SAAS-001
+2026-01-01,S-400,Enterprise Subscription ARR,0.00,3000000.00,INV-SAAS-001
+2026-01-15,S-500,Amazon Web Services Server Hosting,450000.00,0.00,INV-SAAS-002
+2026-01-15,S-100,Cash at Silicon Valley Bank,0.00,450000.00,INV-SAAS-002
+2026-02-01,S-501,Customer Support & Devops Contractors,250000.00,0.00,INV-SAAS-003
+2026-02-01,S-100,Cash at Silicon Valley Bank,0.00,250000.00,INV-SAAS-003
+2026-02-15,S-600,Engineering & Product Salaries,800000.00,0.00,INV-SAAS-004
+2026-02-15,S-100,Cash at Silicon Valley Bank,0.00,800000.00,INV-SAAS-004
+2026-03-01,S-601,Performance Marketing & Google Ads,350000.00,0.00,INV-SAAS-005
+2026-03-01,S-100,Cash at Silicon Valley Bank,0.00,350000.00,INV-SAAS-005
+2026-03-15,S-602,Executive Office Rent & WeWork,150000.00,0.00,INV-SAAS-006
+2026-03-15,S-100,Cash at Silicon Valley Bank,0.00,150000.00,INV-SAAS-006

@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    ENV: str = Field(default="production", env="ENV")
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -30,7 +31,7 @@ class Settings(BaseSettings):
 
     # PostgreSQL Database Connection URL (Asyncpg)
     DATABASE_URL: str = Field(
-        default="postgresql+asyncpg://postgres.ytdngeeuunkimldmjonu:Kahahailaptop@aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
+        default="postgresql+asyncpg://khushimishra@/finos_db?host=/tmp",
         env="DATABASE_URL",
     )
 

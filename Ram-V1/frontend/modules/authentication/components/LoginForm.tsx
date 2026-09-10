@@ -1,103 +1,107 @@
 "use client";
 
 import React, { useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-
-import { loginSchema, LoginInput } from "../schemas/authSchemas";
+import Link from "next/link";
 import { authApi } from "../api/authApi";
-import { Button, Input, Card, CardHeader, CardTitle, CardContent } from "@/components/ui";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 
 export function LoginForm() {
   const router = useRouter();
-  const [serverError, setServerError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<LoginInput>({
-    resolver: zodResolver(loginSchema),
-  });
-
-  const onSubmit = async (data: LoginInput) => {
-    setIsLoading(true);
-    setServerError(null);
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
 
     try {
-      await authApi.login(data);
-      // Redirect to dashboard on successful login
-      router.push("/dashboard");
-    } catch (error: any) {
-      setServerError(error.message || "Failed to log in. Please check your credentials.");
+      await authApi.login({ email, password });
+      window.location.href = "/dashboard";
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message || "Invalid credentials.");
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   return (
-    <Card className="w-full max-w-md shadow-lg border-slate-200">
-      <CardHeader className="space-y-1 text-center">
-        <CardTitle className="text-2xl font-bold text-slate-900">
-          Sign in to FinOS
+    <Card className="w-full max-w-md shadow-2xl border-white/10 bg-zinc-950/90 text-white">
+      <CardHeader className="text-center space-y-1 pb-4 border-b border-white/10">
+        <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black text-sm mx-auto shadow-md shadow-indigo-600/30">
+          F
+        </div>
+        <CardTitle className="text-xl font-bold text-white mt-2">
+          Sign In to FinOS
         </CardTitle>
-        <p className="text-sm text-slate-500">
-          Enter your financial credentials to access your organization dashboard
+        <p className="text-xs text-zinc-400">
+          Enter your financial credentials to access your workspace
         </p>
       </CardHeader>
 
-      <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Server Error Alert */}
-          {serverError && (
-            <div className="p-3 text-sm text-red-700 bg-red-50 rounded-lg border border-red-200">
-              {serverError}
+      <CardContent className="pt-6">
+        <form onSubmit={handleLogin} className="space-y-4">
+          {error && (
+            <div className="p-3 text-xs text-rose-300 bg-rose-950/40 rounded-lg border border-rose-800 font-mono">
+              {error}
             </div>
           )}
 
-          {/* Email Field */}
-          <Input
-            label="Email Address"
-            type="email"
-            placeholder="cfo@manufacturing.com"
-            error={errors.email?.message}
-            {...register("email")}
-          />
-
-          {/* Password Field */}
-          <Input
-            label="Password"
-            type="password"
-            placeholder="••••••••"
-            error={errors.password?.message}
-            {...register("password")}
-          />
-
-          {/* Submit Button */}
-          <Button
-            type="submit"
-            variant="primary"
-            className="w-full mt-2"
-            isLoading={isLoading}
-          >
-            Sign In
-          </Button>
-
-          {/* Footer Link */}
-          <div className="text-center text-sm text-slate-600 pt-2">
-            Don&apos;t have an account?{" "}
-            <Link
-              href="/signup"
-              className="font-semibold text-indigo-600 hover:text-indigo-500"
-            >
-              Sign up
-            </Link>
+          <div>
+            <label className="block text-xs font-mono text-zinc-400 mb-1.5">
+              WORK EMAIL
+            </label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="cfo@finos.com"
+              className="w-full px-3 py-2.5 rounded-lg bg-zinc-900 border border-white/10 text-white text-xs font-mono focus:border-indigo-500 focus:outline-none"
+            />
           </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="text-xs font-mono text-zinc-400">PASSWORD</label>
+              <Link
+                href="/forgot-password"
+                className="text-[11px] text-indigo-400 hover:text-indigo-300 underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••••••"
+              className="w-full px-3 py-2.5 rounded-lg bg-zinc-900 border border-white/10 text-white text-xs font-mono focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition shadow-lg shadow-indigo-600/20 disabled:opacity-50"
+          >
+            {loading ? "Authenticating..." : "Sign In to Workspace"}
+          </button>
         </form>
+
+        <div className="mt-6 text-center text-xs text-zinc-500 pt-4 border-t border-white/5">
+          Don&apos;t have an account?{" "}
+          <Link href="/signup" className="text-indigo-400 font-medium hover:underline">
+            Sign up
+          </Link>
+        </div>
       </CardContent>
     </Card>
   );
 }
+
+export default LoginForm;

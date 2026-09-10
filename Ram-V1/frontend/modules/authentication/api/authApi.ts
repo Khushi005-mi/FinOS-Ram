@@ -1,77 +1,59 @@
-import { supabase } from "@/lib/supabase";
+import { apiClient } from "@/lib/api/axios";
 import { LoginInput, SignupInput } from "../schemas/authSchemas";
 
+export interface AuthResponse {
+  access_token?: string;
+  token_type?: string;
+  success?: boolean;
+  data?: {
+    access_token?: string;
+    [key: string]: any;
+  };
+}
+
 export const authApi = {
-  /**
-   * Log in with email and password (with offline fallback for local testing)
-   */
-  async login({ email, password }: LoginInput) {
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
-      return data;
-    } catch (err: any) {
-      // If network fails (e.g. placeholder Supabase URL), simulate demo login
-      if (err.message === "Failed to fetch" || err.message?.includes("fetch")) {
-        console.warn("⚠️ Supabase backend offline. Logging in demo session...");
-        const demoToken = "demo_jwt_session_token_finos";
-        localStorage.setItem("finos_auth_token", demoToken);
-        return { user: { email, id: "demo-user-123" }, session: { access_token: demoToken } };
-      }
-      throw err;
+  async login(credentials: LoginInput): Promise<AuthResponse> {
+    const response = await apiClient.post<AuthResponse>("/auth/login", {
+      email: credentials.email,
+      password: credentials.password,
+    });
+    const resData = response.data;
+    const token = resData?.access_token || resData?.data?.access_token;
+    if (typeof window !== "undefined" && token) {
+      localStorage.setItem("access_token", token);
+      localStorage.setItem("token", token);
     }
+    return resData;
   },
 
-  /**
-   * Register new user account (with offline fallback for local testing)
-   */
-  async signup({ email, password, fullName, companyName }: SignupInput) {
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            company_name: companyName,
-          },
-        },
-      });
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
-      return data;
-    } catch (err: any) {
-      if (err.message === "Failed to fetch" || err.message?.includes("fetch")) {
-        console.warn("⚠️ Supabase backend offline. Creating demo account...");
-        const demoToken = "demo_jwt_session_token_finos";
-        localStorage.setItem("finos_auth_token", demoToken);
-        return { user: { email, id: "demo-user-123" }, session: { access_token: demoToken } };
-      }
-      throw err;
+  async signup(input: SignupInput): Promise<AuthResponse> {
+    const response = await apiClient.post<AuthResponse>("/auth/signup", {
+      email: input.email,
+      password: input.password,
+      full_name: input.fullName,
+      company_name: input.companyName,
+      currency: input.currency || "USD",
+    });
+    const resData = response.data;
+    const token = resData?.access_token || resData?.data?.access_token;
+    if (typeof window !== "undefined" && token) {
+      localStorage.setItem("access_token", token);
+      localStorage.setItem("token", token);
     }
+    return resData;
   },
 
-  /**
-   * Log out active user
-   */
   async logout() {
     try {
-      await supabase.auth.signOut();
+      await apiClient.post("/auth/logout");
     } catch {
-      // Ignore offline logout errors
+      // ignore
     } finally {
-      localStorage.removeItem("finos_auth_token");
-      window.location.href = "/login";
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("token");
+        window.location.href = "/login";
+      }
     }
   },
 };

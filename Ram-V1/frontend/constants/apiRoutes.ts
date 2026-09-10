@@ -1,11 +1,9 @@
-/**
- * Centralized API Route Paths matching FastAPI Backend Endpoints (/api/v1)
- */
 export const API_ROUTES = {
     AUTH: {
       LOGIN: "/auth/login",
       SIGNUP: "/auth/signup",
       ME: "/auth/me",
+      PASSWORD_CHANGE: "/auth/password/change",
     },
     INGESTION: {
       BATCH: "/ingestion/batch",

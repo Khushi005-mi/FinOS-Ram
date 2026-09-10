@@ -1,72 +1,119 @@
-"""
-backend/app/core/security.py
-
-Authentication & Multi-Tenant Security Gate:
-- Validates JWT Bearer tokens when present
-- Gracefully falls back to default tenant profile for seamless local testing & SSR data fetches
-"""
 from datetime import datetime, timedelta
-from typing import Optional, Any
-from fastapi import Depends, HTTPException, status
+from typing import List, Optional
+import uuid
+import bcrypt
+
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel
-import uuid
 
 from app.core.config import settings
 
-# auto_error=False allows requests without Bearer tokens to fall back safely
 reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/auth/login",
     auto_error=False,
 )
+oauth2_scheme = reusable_oauth2
 
 
 class TokenData(BaseModel):
-    user_id: Optional[str] = "00000000-0000-0000-0000-000000000001"
-    organization_id: str = "00000000-0000-0000-0000-000000000001"
-    email: Optional[str] = "cfo@apexmanufacturing.com"
-    role: Optional[str] = "ADMIN"
+    user_id: str
+    organization_id: str
+    email: str
+    role: str
 
 
-def create_access_token(subject: str, organization_id: str, expires_delta: Optional[timedelta] = None) -> str:
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    try:
+        pwd_bytes = plain_password.encode("utf-8")[:72]
+        hash_bytes = hashed_password.encode("utf-8")
+        return bcrypt.checkpw(pwd_bytes, hash_bytes)
+    except Exception:
+        return False
+
+
+def get_password_hash(password: str) -> str:
+    pwd_bytes = password.encode("utf-8")[:72]
+    salt = bcrypt.gensalt(rounds=12)
+    return bcrypt.hashpw(pwd_bytes, salt).decode("utf-8")
+
+
+def create_access_token(
+    subject: str,
+    organization_id: str,
+    role: str = "ANALYST",
+    email: str = "",
+    expires_delta: Optional[timedelta] = None,
+) -> str:
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+
     to_encode = {
         "exp": expire,
         "sub": str(subject),
         "org_id": str(organization_id),
+        "role": str(role),
+        "email": str(email),
     }
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
 async def get_current_tenant_user(
-    token: Optional[str] = Depends(reusable_oauth2),
+    request: Request,
+    header_token: Optional[str] = Depends(reusable_oauth2),
 ) -> TokenData:
-    default_tenant = TokenData(
-        user_id="00000000-0000-0000-0000-000000000001",
-        organization_id="00000000-0000-0000-0000-000000000001",
-        email="cfo@apexmanufacturing.com",
-        role="ADMIN",
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
     )
 
+    token = request.cookies.get("finos_access_token")
+    if not token and header_token:
+        token = header_token
+
     if not token:
-        return default_tenant
+        raise credentials_exception
 
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        org_id = payload.get("org_id") or payload.get("organization_id") or default_tenant.organization_id
-        user_id = payload.get("sub") or default_tenant.user_id
-        email = payload.get("email") or default_tenant.email
-        role = payload.get("role") or default_tenant.role
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+        )
+        user_id: Optional[str] = payload.get("sub")
+        org_id: Optional[str] = payload.get("org_id")
+        email: Optional[str] = payload.get("email")
+        role: Optional[str] = payload.get("role", "ANALYST")
+
+        if not user_id or not org_id:
+            raise credentials_exception
+
+        uuid.UUID(str(user_id))
+        uuid.UUID(str(org_id))
+
         return TokenData(
             user_id=str(user_id),
             organization_id=str(org_id),
-            email=str(email),
+            email=str(email or ""),
             role=str(role),
         )
-    except (JWTError, Exception):
-        return default_tenant
+    except (JWTError, ValueError):
+        raise credentials_exception
+
+
+get_current_user = get_current_tenant_user
+
+
+def require_roles(allowed_roles: List[str]):
+    async def role_checker(current_user: TokenData = Depends(get_current_tenant_user)) -> TokenData:
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied: Requires one of the following roles: {', '.join(allowed_roles)}. Current role: '{current_user.role}'.",
+            )
+        return current_user
+    return role_checker

@@ -1,6 +1,3 @@
-"""
-backend/app/services/dashboard_service.py
-"""
 import uuid
 from typing import Any, Dict, List
 import pandas as pd
@@ -9,19 +6,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.journal_entry import JournalEntry
 from app.db.models.organization import Organization
-from app.engine.financial_math import (
-    compute_cogs_breakdown,
-    generate_cfo_insights,
-)
+from app.engine.cogs_breakdown import compute_cogs_breakdown
+from app.engine.financial_math import compute_executive_metrics
+from app.engine.insights_generator import generate_cfo_insights
 
 
-def _to_uuid(val: Any) -> uuid.UUID:
+def _parse_uuid(val: Any) -> uuid.UUID:
     if isinstance(val, uuid.UUID):
         return val
     try:
         return uuid.UUID(str(val))
-    except Exception:
-        return uuid.UUID("00000000-0000-0000-0000-000000000001")
+    except (ValueError, TypeError, AttributeError):
+        raise ValueError(f"Invalid UUID format: '{val}'")
 
 
 class DashboardService:
@@ -40,7 +36,7 @@ class DashboardService:
             "description",
         ]
 
-        org_uuid = _to_uuid(organization_id)
+        org_uuid = _parse_uuid(organization_id)
 
         org_stmt = select(Organization).where(Organization.id == org_uuid)
         org_result = await db.execute(org_stmt)
@@ -50,7 +46,10 @@ class DashboardService:
             return pd.DataFrame(columns=canonical_columns)
 
         raw_batch = org.active_batch_id
-        batch_uuid = _to_uuid(raw_batch)
+        try:
+            batch_uuid = uuid.UUID(str(raw_batch))
+        except ValueError:
+            batch_uuid = None
 
         entry_stmt = (
             select(JournalEntry)
@@ -98,4 +97,22 @@ class DashboardService:
         organization_id: Any,
     ) -> List[Dict[str, Any]]:
         df = await cls.get_active_batch_dataframe(db, organization_id)
-        return generate_cfo_insights(df)
+        metrics = compute_executive_metrics(df)
+        cogs = compute_cogs_breakdown(df)
+        return generate_cfo_insights(metrics, cogs)
+
+    @classmethod
+    async def get_executive_overview(
+        cls,
+        db: AsyncSession,
+        organization_id: Any,
+    ) -> Dict[str, Any]:
+        df = await cls.get_active_batch_dataframe(db, organization_id)
+        metrics = compute_executive_metrics(df)
+        cogs = compute_cogs_breakdown(df)
+        insights = generate_cfo_insights(metrics, cogs)
+        return {
+            "metrics": metrics,
+            "cogs_breakdown": cogs,
+            "insights": insights,
+        }

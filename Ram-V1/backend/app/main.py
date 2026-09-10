@@ -1,43 +1,51 @@
 from contextlib import asynccontextmanager
+import logging
+import time
 import uuid
-from fastapi import FastAPI, status
+from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.api.router import api_router
 from app.core.config import settings
+from app.core.logging import setup_logging, request_id_ctx, tenant_id_ctx
 from app.db.base import Base
 from app.db.models.organization import Organization
 from app.db.session import AsyncSessionLocal, engine
 import app.db.models
 
+# Initialize structured JSON telemetry
+setup_logging()
+logger = logging.getLogger("finos.core")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("Initializing FinOS Enterprise Core Gateway...")
     try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
         async with AsyncSessionLocal() as db:
-            org_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+            org_id = uuid.UUID("11111111-1111-1111-1111-111111111111")
             stmt = select(Organization).where(Organization.id == org_id)
             res = await db.execute(stmt)
             if not res.scalar_one_or_none():
                 db.add(
                     Organization(
                         id=org_id,
-                        name="Apex Manufacturing Ltd.",
-                        slug="apex-manufacturing",
-                        industry_type="MANUFACTURING",
-                        currency="INR",
-                        fiscal_year_start=4,
+                        name="FinOS Global Enterprises",
+                        slug="finos-global",
+                        industry_type="TECHNOLOGY",
+                        currency="USD",
+                        fiscal_year_start=1,
                         is_active=True,
                     )
                 )
                 await db.commit()
+                logger.info("FinOS master enterprise tenant verified.")
     except Exception as err:
-        print(f"Lifespan DB init warning: {err}")
+        logger.error(f"Lifespan startup warning: {err}", exc_info=True)
     yield
+    logger.info("Shutting down FinOS Enterprise Core Gateway...")
 
 
 app = FastAPI(
@@ -50,36 +58,98 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Explicit allowed origins matching exact deployment domains
+# 1. Structured Telemetry & Tracing Middleware
+@app.middleware("http")
+async def telemetry_middleware(request: Request, call_next):
+    req_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    request_id_ctx.set(req_id)
+    
+    start_time = time.time()
+    response: Response = await call_next(request)
+    duration_ms = round((time.time() - start_time) * 1000, 2)
+    
+    response.headers["X-Request-ID"] = req_id
+    response.headers["X-Process-Time-Ms"] = str(duration_ms)
+    
+    logger.info(
+        f"{request.method} {request.url.path} -> {response.status_code} ({duration_ms}ms)"
+    )
+    return response
+
+# 2. Hardened CORS
 ALLOWED_ORIGINS = [
-    "https://finos-frontend-ui.onrender.com",
-    "https://finos-ram.onrender.com",
     "http://localhost:3000",
     "http://localhost:3001",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3001",
+    "https://finos-frontend-ui.onrender.com",
+    "https://finos-ram.onrender.com",
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=r"https://.*\.onrender\.com",
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
-app.include_router(api_router, prefix=settings.API_V1_STR)
-
-
-@app.get("/health", status_code=status.HTTP_200_OK, tags=["System Health"])
-async def health_check():
+# 3. Global Exception Handlers
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    req_id = request_id_ctx.get()
     return JSONResponse(
-        status_code=200,
-        content={"status": "healthy", "project": settings.PROJECT_NAME},
+        status_code=exc.status_code,
+        headers=getattr(exc, "headers", None),
+        content={
+            "success": False,
+            "data": None,
+            "error": {
+                "code": f"HTTP_{exc.status_code}",
+                "message": exc.detail,
+            },
+            "request_id": req_id,
+        },
     )
 
+# 4. Probes: Liveness & Deep PostgreSQL 16 Readiness
+@app.get("/healthz", status_code=status.HTTP_200_OK, tags=["SRE Health Probes"])
+async def liveness_probe():
+    """Liveness probe: verifies process event loop is unblocked."""
+    return {"status": "alive", "project": settings.PROJECT_NAME}
 
-@app.get("/", status_code=status.HTTP_200_OK, include_in_schema=False)
-async def root():
-    return {"message": f"Welcome to {settings.PROJECT_NAME} API Engine"}
+
+@app.get("/readyz", tags=["SRE Health Probes"])
+async def readiness_probe():
+    """Readiness probe: verifies live PostgreSQL 16 connectivity and round-trip latency."""
+    start_time = time.time()
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(text("SELECT 1;"))
+        latency_ms = round((time.time() - start_time) * 1000, 2)
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "status": "ready",
+                "database": "connected",
+                "engine": "PostgreSQL 16",
+                "latency_ms": latency_ms,
+            },
+        )
+    except Exception as exc:
+        logger.error(f"Readiness check failed: {exc}", exc_info=True)
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "not_ready",
+                "database": "disconnected",
+                "error": str(exc),
+            },
+        )
+
+# Legacy probe compatibility
+@app.get("/health", status_code=status.HTTP_200_OK, tags=["SRE Health Probes"])
+async def health_check():
+    return {"status": "healthy", "project": settings.PROJECT_NAME}
+
+app.include_router(api_router, prefix=settings.API_V1_STR)

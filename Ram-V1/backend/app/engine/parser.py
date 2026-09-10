@@ -1,20 +1,20 @@
 """
 backend/app/engine/parser.py
-
-Universal Parser Engine:
-- Pre-scans raw text to skip title banners and preserve all data columns.
-- Robust period detection: un-pivots multi-month wide P&L columns ("Jan 2026", "Feb 2026", "Q1 2026").
+Universal Hardened Parser Engine:
+- Magic-byte file signature validation to detect disguised binaries
+- Formula injection sanitization (protects against CSV injection)
+- Multi-encoding CSV decoding with delimiter sniffing
+- Tabular extraction for Excel and PDF statements
 """
 import io
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 import pandas as pd
 import pdfplumber
 
 class FileParsingError(Exception):
     pass
 
-# Matches 'Jan', 'Jan 2026', 'January 2026', 'Jan-26', 'Q1 2026', 'FY26', '2026-01'
 MONTH_PATTERN = re.compile(
     r"^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|"
     r"january|february|march|april|may|june|july|august|september|october|november|december|"
@@ -22,12 +22,41 @@ MONTH_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+DISALLOWED_MAGIC_SIGNATURES = [
+    b"MZ",
+    b"\x7fELF",
+    b"\xca\xfe\xba\xbe",
+    b"PK\x05\x06",
+]
+
+
+def _validate_magic_bytes(file_bytes: bytes, extension: str) -> None:
+    if not file_bytes:
+        raise FileParsingError("Uploaded file is empty (0 bytes).")
+
+    for sig in DISALLOWED_MAGIC_SIGNATURES:
+        if file_bytes.startswith(sig):
+            raise FileParsingError("Security Violation: Disallowed binary file signature detected.")
+
+    if extension == "pdf":
+        if not file_bytes.startswith(b"%PDF-"):
+            raise FileParsingError("Invalid PDF document signature.")
+    elif extension in ["xlsx"]:
+        if not file_bytes.startswith(b"PK\x03\x04"):
+            raise FileParsingError("Invalid XLSX document signature (missing OpenXML container).")
+    elif extension == "csv":
+        if bytes([0]) in file_bytes[:1024]:
+            raise FileParsingError("Corrupted or binary file disguised as CSV.")
+
+
 def parse_file_stream(file_name: str, file_bytes: bytes) -> pd.DataFrame:
-    extension = file_name.lower().split(".")[-1]
+    extension = file_name.lower().split(".")[-1] if "." in file_name else ""
+    _validate_magic_bytes(file_bytes, extension)
+
     try:
         if extension in ["xlsx", "xls"]:
             df = _parse_excel(file_bytes)
-        elif extension == "csv":
+        elif extension in ["csv", "tsv", "txt"]:
             df = _parse_csv(file_bytes)
         elif extension == "pdf":
             df = _parse_pdf(file_bytes)
@@ -42,32 +71,47 @@ def parse_file_stream(file_name: str, file_bytes: bytes) -> pd.DataFrame:
             raise err
         raise FileParsingError(f"Failed to parse '{file_name}': {str(err)}") from err
 
+
 def _parse_excel(file_bytes: bytes) -> pd.DataFrame:
     buffer = io.BytesIO(file_bytes)
     return pd.read_excel(buffer, engine="openpyxl" if buffer.getvalue().startswith(b"PK") else None)
+
 
 def _parse_csv(file_bytes: bytes) -> pd.DataFrame:
     for encoding in ["utf-8-sig", "utf-8", "latin1"]:
         try:
             text = file_bytes.decode(encoding)
-            lines = [l for l in text.splitlines() if l.strip()]
-            if not lines:
+            raw_lines = text.splitlines()
+            
+            # 1. Filter out metadata banner comments (#, *, //) and blank lines
+            cleaned_lines = []
+            for l in raw_lines:
+                s = l.strip()
+                if not s or s.startswith(("#", "*", "//")):
+                    continue
+                cleaned_lines.append(s)
+                
+            if not cleaned_lines:
                 return pd.DataFrame()
 
-            # Find the header line with the maximum number of column delimiters
-            header_skip = 0
-            max_delims = 0
-            for idx, line in enumerate(lines[:10]):
-                delims_count = max(line.count(","), line.count(";"), line.count("\t"))
-                if delims_count > max_delims:
-                    max_delims = delims_count
-                    header_skip = idx
+            # 2. Identify the true header row (first row with >= 2 delimiters and alphabetic characters)
+            header_idx = 0
+            for idx, line in enumerate(cleaned_lines[:10]):
+                delim_count = max(line.count(","), line.count(";"), line.count("\t"))
+                if delim_count >= 2 and any(c.isalpha() for c in line):
+                    header_idx = idx
+                    break
 
-            buffer = io.StringIO("\n".join(lines[header_skip:]))
-            return pd.read_csv(buffer, sep=None, engine="python", on_bad_lines="skip")
+            buffer = io.StringIO("\n".join(cleaned_lines[header_idx:]))
+            df = pd.read_csv(buffer, sep=None, engine="python", on_bad_lines="skip")
+            
+            # Clean column whitespace
+            df.columns = [str(c).strip() for c in df.columns]
+            return df
         except Exception:
             continue
     raise FileParsingError("Unable to decode CSV with supported encodings.")
+
 
 def _parse_pdf(file_bytes: bytes) -> pd.DataFrame:
     buffer = io.BytesIO(file_bytes)
@@ -85,6 +129,13 @@ def _parse_pdf(file_bytes: bytes) -> pd.DataFrame:
 
     headers = [str(cell).strip() if cell else f"Col_{i}" for i, cell in enumerate(extracted_rows[0])]
     return pd.DataFrame(extracted_rows[1:], columns=headers)
+
+
+def _sanitize_formula(val: Any) -> Any:
+    if isinstance(val, str) and val and val[0] in ["=", "+", "-", "@"]:
+        return "'" + val
+    return val
+
 
 def _clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
@@ -106,13 +157,12 @@ def _clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
             deduped_cols.append(c_str)
     df.columns = deduped_cols
 
-    for i in range(df.shape[1]):
-        col_series = df.iloc[:, i]
-        if col_series.dtype == "object":
-            df.iloc[:, i] = col_series.apply(
-                lambda x: None if pd.isna(x) or x is None or str(x).strip().lower() in ["nan", "none", ""] else str(x).strip()
-            )
+    for col in df.columns:
+        df[col] = df[col].apply(
+            lambda x: None if pd.isna(x) or x is None or str(x).strip().lower() in ["nan", "none", "null", ""] else _sanitize_formula(str(x).strip())
+        )
     return df
+
 
 def _detect_and_unpivot_wide_table(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty or len(df.columns) < 3:

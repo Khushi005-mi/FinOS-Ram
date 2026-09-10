@@ -1,0 +1,19 @@
+# EXPORTED FROM ENTERPRISE ERP SYSTEM: SAP S/4HANA
+# REPORT: COMBINED TRIAL BALANCE RUN
+# FISCAL PERIOD: Q1 2026
+Date,Account_Code,Particulars,Debit,Credit,Ref_Doc
+2026-01-05,GL-1010,Cash & Liquid Reserves,"$12,500,000.00","$0.00",DOC-SAP-1092
+2026-01-05,GL-4010,Enterprise Hardware & Device Sales,"$0.00","$10,000,000.00",DOC-SAP-1092
+2026-01-05,GL-4020,Digital Services & App Store Revenue,"$0.00","$2,500,000.00",DOC-SAP-1092
+2026-01-15,GL-5010,Direct Silicon & Chipset Components,"$3,800,000.00","$0.00",DOC-SAP-1140
+2026-01-15,GL-2010,Accounts Payable (Trade Vendors),"$0.00","$3,800,000.00",DOC-SAP-1140
+2026-01-20,GL-5020,Cloud Infrastructure Hosting - AWS & GCP,"$1,200,000.00","$0.00",DOC-SAP-1185
+2026-01-20,GL-1010,Cash & Liquid Reserves,"$0.00","$1,200,000.00",DOC-SAP-1185
+2026-02-10,GL-6010,Research & Engineering Payroll,"$2,400,000.00","$0.00",DOC-SAP-1290
+2026-02-10,GL-1010,Cash & Liquid Reserves,"$0.00","$2,400,000.00",DOC-SAP-1290
+2026-02-18,GL-6020,Global Marketing & Advertising Campaigns,"$1,100,000.00","$0.00",DOC-SAP-1342
+2026-02-18,GL-1010,Cash & Liquid Reserves,"$0.00","$1,100,000.00",DOC-SAP-1342
+2026-03-01,GL-6030,Corporate Facilities & Data Center Leases,"$500,000.00","$0.00",DOC-SAP-1401
+2026-03-01,GL-1010,Cash & Liquid Reserves,"$0.00","$500,000.00",DOC-SAP-1401
+2026-03-25,GL-2010,Accounts Payable (Trade Vendors),"$3,800,000.00","$0.00",DOC-SAP-1480
+2026-03-25,GL-1010,Cash & Liquid Reserves,"$0.00","$3,800,000.00",DOC-SAP-1480

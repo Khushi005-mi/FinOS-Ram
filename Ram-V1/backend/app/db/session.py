@@ -1,10 +1,13 @@
 from typing import AsyncGenerator
+
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
+
 from app.core.config import settings
 
 # 1. Normalize Database URL to guarantee asyncpg driver
@@ -15,14 +18,26 @@ elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+as
     db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 # 2. Instantiate Async Engine
-engine: AsyncEngine = create_async_engine(
-    db_url,
-    echo=False,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,
-    connect_args={"statement_cache_size": 0},  # Required for Supabase PgBouncer Pooler
-)
+# Tests get NullPool (no connection reuse across event loops).
+# Production keeps the tuned QueuePool settings.
+_is_testing = getattr(settings, "ENV", "").lower() == "test" or getattr(settings, "TESTING", False)
+
+if _is_testing:
+    engine: AsyncEngine = create_async_engine(
+        db_url,
+        echo=False,
+        poolclass=NullPool,
+        connect_args={"statement_cache_size": 0},
+    )
+else:
+    engine: AsyncEngine = create_async_engine(
+        db_url,
+        echo=False,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,
+        connect_args={"statement_cache_size": 0},  # Required for Supabase PgBouncer Pooler
+    )
 
 # 3. Create Async Session Factory
 AsyncSessionLocal = async_sessionmaker(
@@ -32,6 +47,7 @@ AsyncSessionLocal = async_sessionmaker(
     autocommit=False,
     autoflush=False,
 )
+
 
 # 4. Dependency for FastAPI Endpoints
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

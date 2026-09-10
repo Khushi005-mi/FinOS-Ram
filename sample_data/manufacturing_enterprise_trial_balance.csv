@@ -1,0 +1,17 @@
+* APEX MANUFACTURING ENTERPRISE SYSTEM EXPORT *
+* CONFIDENTIAL AUDITED TRIAL BALANCE *
+transaction_date,gl_code,account_name,dr_amount,cr_amount,voucher_no
+2026-01-10,ACC-1001,SBI Main Operating Account,"₹4,50,00,000.00","₹0.00",VCH-09812
+2026-01-10,ACC-4001,Industrial Finished Goods Sales,"₹0.00","₹4,50,00,000.00",VCH-09812
+2026-01-20,ACC-5001,Raw Steel & Alloy Ingestion,"₹1,80,00,000.00","₹0.00",VCH-09845
+2026-01-20,ACC-2001,Creditors for Raw Material,"₹0.00","₹1,80,00,000.00",VCH-09845
+2026-02-05,ACC-5002,Factory Direct Labor Wages,"₹75,00,000.00","₹0.00",VCH-09910
+2026-02-05,ACC-1001,SBI Main Operating Account,"₹0.00","₹75,00,000.00",VCH-09910
+2026-02-15,ACC-5003,Freight & Inward Logistics,"₹25,00,000.00","₹0.00",VCH-09944
+2026-02-15,ACC-1001,SBI Main Operating Account,"₹0.00","₹25,00,000.00",VCH-09944
+2026-03-01,ACC-6001,Plant Electricity & Heavy Utilities,"₹30,00,000.00","₹0.00",VCH-10012
+2026-03-01,ACC-1001,SBI Main Operating Account,"₹0.00","₹30,00,000.00",VCH-10012
+2026-03-10,ACC-6002,Administrative Staff Salaries,"₹40,00,000.00","₹0.00",VCH-10056
+2026-03-10,ACC-1001,SBI Main Operating Account,"₹0.00","₹40,00,000.00",VCH-10056
+2026-03-20,ACC-2001,Creditors for Raw Material,"₹1,80,00,000.00","₹0.00",VCH-10115
+2026-03-20,ACC-1001,SBI Main Operating Account,"₹0.00","₹1,80,00,000.00",VCH-10115

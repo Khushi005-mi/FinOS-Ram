@@ -56,7 +56,7 @@ export default function AcceptInvitePage() {
           <form onSubmit={handleAccept} className="space-y-4">
             {error && (
               <div className="p-3 text-xs text-rose-300 bg-rose-950/40 rounded-lg border border-rose-800 font-mono">
-                {typeof error === "string" ? error : (error?.message || JSON.stringify(error))}
+                {error}
               </div>
             )}
 

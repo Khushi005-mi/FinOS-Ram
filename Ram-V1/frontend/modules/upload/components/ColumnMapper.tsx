@@ -9,7 +9,6 @@ export interface ColumnMapperProps {
   file?: File | null;
 }
 
-// 1️⃣ NAMED EXPORT
 export function ColumnMapper({ file }: ColumnMapperProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -23,13 +22,8 @@ export function ColumnMapper({ file }: ColumnMapperProps) {
     setError(null);
 
     try {
-      // 1. Submit the actual file payload
       await submitBatch([file]);
-
-      // 2. Invalidate stale dashboard cache
       await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-
-      // 3. Navigate smoothly to dashboard
       router.push("/dashboard");
     } catch (err: any) {
       console.error("Upload failed:", err);
@@ -59,5 +53,4 @@ export function ColumnMapper({ file }: ColumnMapperProps) {
   );
 }
 
-// 2️⃣ DEFAULT EXPORT at the bottom
 export default ColumnMapper;

@@ -74,7 +74,7 @@ export function TeamManagementCard() {
 
           {error && (
             <div className="p-3 text-xs text-rose-300 bg-rose-950/40 rounded-lg border border-rose-800">
-              {typeof error === "string" ? error : (error?.message || JSON.stringify(error))}
+              {typeof error === "string" ? error : (((error as any)?.message || String(error)) || JSON.stringify(error))}
             </div>
           )}
 

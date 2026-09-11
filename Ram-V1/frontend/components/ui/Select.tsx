@@ -36,7 +36,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             </option>
           ))}
         </select>
-        {error && <p className="text-xs text-red-600 font-medium">{typeof error === "string" ? error : (error?.message || JSON.stringify(error))}</p>}
+        {error && <p className="text-xs text-red-600 font-medium">{typeof error === "string" ? error : (((error as any)?.message || String(error)) || JSON.stringify(error))}</p>}
       </div>
     );
   }

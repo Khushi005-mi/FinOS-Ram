@@ -2,11 +2,12 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import Link from "next/link";
+import LandingNavbar from "@/components/navigation/LandingNavbar";
+import LandingFooter from "@/components/navigation/LandingFooter";
 
-export default function PeakCelestialLanding() {
+export default function FinOSVisualMasterpiece() {
+  const [theme, setTheme] = useState<"night" | "day">("night");
   const [mousePos, setMousePos] = useState({ x: -1000, y: -1000 });
-  const [isMouseDown, setIsMouseDown] = useState(false);
-  const [cursorMode, setCursorMode] = useState<"sun" | "moon">("sun");
   const [isLoaded, setIsLoaded] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -16,13 +17,7 @@ export default function PeakCelestialLanding() {
     const handleMouseMove = (e: MouseEvent) => {
       setMousePos({ x: e.clientX, y: e.clientY });
     };
-
-    const handleMouseDown = () => setIsMouseDown(true);
-    const handleMouseUp = () => setIsMouseDown(false);
-
     window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mousedown", handleMouseDown);
-    window.addEventListener("mouseup", handleMouseUp);
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -40,15 +35,14 @@ export default function PeakCelestialLanding() {
     };
     window.addEventListener("resize", handleResize);
 
-    const bubbles = Array.from({ length: 140 }, () => ({
+    const bubbles = Array.from({ length: 85 }, () => ({
       x: Math.random() * width,
       y: Math.random() * height,
-      radius: Math.random() * 7 + 2,
-      baseAlpha: Math.random() * 0.5 + 0.15,
-      vx: (Math.random() - 0.5) * 0.6,
-      vy: -Math.random() * 0.9 - 0.3,
-      repulsionRadius: 160,
-      color: Math.random() > 0.5 ? "59, 130, 246" : "16, 185, 129",
+      radius: Math.random() * 14 + 4,
+      baseAlpha: Math.random() * 0.35 + 0.1,
+      vx: (Math.random() - 0.5) * 0.4,
+      vy: -Math.random() * 0.7 - 0.2,
+      repulsionRadius: 180,
     }));
 
     const render = () => {
@@ -58,7 +52,7 @@ export default function PeakCelestialLanding() {
         b.x += b.vx;
         b.y += b.vy;
 
-        if (b.y < -20) b.y = height + 20;
+        if (b.y < -30) b.y = height + 30;
         if (b.x < 0) b.x = width;
         if (b.x > width) b.x = 0;
 
@@ -67,16 +61,24 @@ export default function PeakCelestialLanding() {
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist < b.repulsionRadius) {
-          const force = (1 - dist / b.repulsionRadius) * 7;
-          b.x += (dx / dist) * force * 4.5;
-          b.y += (dy / dist) * force * 4.5;
+          const force = (1 - dist / b.repulsionRadius) * 8;
+          b.x += (dx / dist) * force * 4;
+          b.y += (dy / dist) * force * 4;
         }
 
         ctx.beginPath();
         ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${b.color}, ${b.baseAlpha * 1.8})`;
-        ctx.shadowBlur = 18;
-        ctx.shadowColor = `rgba(${b.color}, 0.9)`;
+        
+        if (theme === "night") {
+          ctx.fillStyle = `rgba(255, 255, 255, ${b.baseAlpha})`;
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = "rgba(255, 255, 255, 0.4)";
+        } else {
+          ctx.fillStyle = `rgba(0, 0, 0, ${b.baseAlpha * 0.8})`;
+          ctx.shadowBlur = 12;
+          ctx.shadowColor = "rgba(0, 0, 0, 0.2)";
+        }
+
         ctx.fill();
         ctx.closePath();
       });
@@ -88,159 +90,291 @@ export default function PeakCelestialLanding() {
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mousedown", handleMouseDown);
-      window.removeEventListener("mouseup", handleMouseUp);
       window.removeEventListener("resize", handleResize);
       cancelAnimationFrame(animationFrameId);
     };
-  }, [mousePos]);
+  }, [mousePos, theme]);
 
   return (
-    <div className="min-h-screen bg-[#010308] text-zinc-100 flex flex-col justify-between relative overflow-hidden cursor-none selection:bg-blue-500 selection:text-white">
-      {/* Floating Dense Quantum Bubbles Canvas */}
+    <div className={`min-h-screen flex flex-col justify-between selection:bg-blue-600 selection:text-white font-sans transition-colors duration-700 relative overflow-hidden ${
+      theme === "night" ? "bg-[#020408] text-zinc-100" : "bg-[#F8FAFC] text-zinc-900"
+    }`}>
       <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none z-0" />
 
-      {/* Custom Celestial Cursor (Sun / Moon Toggleable Orb) */}
       <div
-        className={`fixed pointer-events-none z-50 transform -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 ease-out flex items-center justify-center ${
-          isMouseDown ? "scale-75" : "scale-100"
+        className={`absolute w-[500px] h-[500px] rounded-full blur-[120px] pointer-events-none transform -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 ease-out z-0 ${
+          theme === "night" ? "bg-white/[0.04]" : "bg-black/[0.03]"
         }`}
         style={{ left: mousePos.x, top: mousePos.y }}
-      >
-        <div
-          className={`relative rounded-full transition-all duration-500 flex items-center justify-center ${
-            cursorMode === "sun"
-              ? "w-12 h-12 bg-amber-400 shadow-[0_0_35px_#fbbf24,0_0_70px_#f59e0b]"
-              : "w-10 h-10 bg-slate-200 shadow-[0_0_30px_#e2e8f0,0_0_60px_#94a3b8]"
-          }`}
-        >
-          {cursorMode === "moon" && (
-            <div className="absolute w-7 h-7 rounded-full bg-slate-900 -top-1 -right-1 opacity-90" />
-          )}
-        </div>
+      />
+
+      <div className="z-20">
+        <LandingNavbar />
       </div>
 
-      {/* Navigation Header */}
-      <header className="w-full max-w-7xl mx-auto px-8 py-6 flex items-center justify-between z-20 border-b border-white/10 backdrop-blur-xl sticky top-0 bg-[#010308]/70">
-        <div className="flex items-center space-x-3">
-          <div className="w-3.5 h-3.5 rounded-full bg-blue-500 shadow-[0_0_20px_#3b82f6] animate-pulse" />
-          <span className="font-mono tracking-widest font-bold text-sm text-zinc-100">
-            FINOS // CELESTIAL OS
-          </span>
-        </div>
-
-        <div className="flex items-center space-x-5">
-          <button
-            onClick={() => setCursorMode(cursorMode === "sun" ? "moon" : "sun")}
-            className="px-3.5 py-1.5 rounded-full border border-white/15 text-xs font-mono text-zinc-200 hover:bg-white/10 transition flex items-center space-x-1.5 bg-white/5"
-          >
-            <span>{cursorMode === "sun" ? "☀️ Sun Cursor" : "🌙 Moon Cursor"}</span>
-          </button>
-          <Link href="/login" className="text-xs font-medium text-zinc-300 hover:text-white transition">
-            Sign In
-          </Link>
-          <Link
-            href="/signup"
-            className="px-5 py-2.5 rounded-full bg-blue-600 text-white text-xs font-semibold hover:bg-blue-500 transition shadow-[0_0_25px_rgba(37,99,235,0.5)]"
-          >
-            Get Started
-          </Link>
-        </div>
-      </header>
-
-      {/* Hero Section */}
-      <main className="max-w-6xl mx-auto px-6 py-28 text-center z-10 flex flex-col items-center">
-        <div
-          className={`transition-all duration-1000 transform ${
-            isLoaded ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
+      <div className="fixed bottom-8 right-8 z-50">
+        <button
+          onClick={() => setTheme(theme === "night" ? "day" : "night")}
+          className={`px-5 py-3 rounded-full backdrop-blur-2xl border font-mono text-xs font-semibold shadow-2xl transition-all duration-300 transform hover:scale-105 flex items-center space-x-2 ${
+            theme === "night" 
+              ? "bg-zinc-900/80 border-white/20 text-white shadow-[0_0_30px_rgba(255,255,255,0.15)]" 
+              : "bg-white/90 border-black/15 text-black shadow-[0_10px_30px_rgba(0,0,0,0.15)]"
           }`}
         >
-          <span className="inline-flex items-center space-x-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-mono tracking-wider backdrop-blur-2xl mb-8 shadow-2xl">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping" />
-            <span>ENTERPRISE FINANCIAL OPERATING SYSTEM // V10</span>
-          </span>
+          <span>{theme === "night" ? "🌙 Night Mode Active" : "☀️ Day Mode Active"}</span>
+        </button>
+      </div>
+
+      <section className="relative pt-24 pb-32 px-6 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-12 items-center z-10">
+        <div className="lg:col-span-6 space-y-8">
+          <div className={`inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full border font-mono text-xs tracking-wider uppercase backdrop-blur-md ${
+            theme === "night" ? "bg-white/5 border-white/10 text-zinc-300" : "bg-black/5 border-black/10 text-zinc-700"
+          }`}>
+            <span>FINANCIAL INTELLIGENCE, BUILT FOR BUSINESS</span>
+          </div>
+
+          <h1 className={`text-5xl md:text-7xl font-bold tracking-tight leading-[1.08] ${
+            theme === "night" ? "text-white" : "text-zinc-950"
+          }`}>
+            Turn financial data into decisions.
+          </h1>
+
+          <p className={`text-lg font-normal leading-relaxed max-w-xl ${
+            theme === "night" ? "text-zinc-400" : "text-zinc-600"
+          }`}>
+            FINOS brings your financial data together, turns it into a trusted view of your business, and helps you understand what is happening, why it matters, and where to look next.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-3 sm:space-y-0 sm:space-x-4 pt-2">
+            <Link
+              href="/signup"
+              className="px-8 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm text-center transition shadow-lg shadow-blue-600/30"
+            >
+              Get Started
+            </Link>
+            <a
+              href="#how-it-works"
+              className={`px-8 py-3.5 rounded-xl font-medium text-sm text-center transition border ${
+                theme === "night" ? "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 border-zinc-800" : "bg-white hover:bg-zinc-100 text-zinc-700 border-zinc-200 shadow-sm"
+              }`}
+            >
+              See How It Works
+            </a>
+          </div>
+
+          <p className={`text-xs font-mono pt-2 ${theme === "night" ? "text-zinc-500" : "text-zinc-500"}`}>
+            Built around a simple principle: financial decisions should start with trusted financial data.
+          </p>
         </div>
 
-        <h1
-          className={`text-6xl md:text-9xl font-extrabold tracking-tight text-white mb-8 leading-[1.04] transition-all duration-1000 delay-200 transform ${
-            isLoaded ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"
-          }`}
-        >
-          Absolute Financial Truth. <br />
-          <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">
-            Rendered in Quantum Glass.
-          </span>
-        </h1>
+        <div className="lg:col-span-6">
+          <div className={`rounded-3xl p-6 shadow-2xl border relative backdrop-blur-xl ${
+            theme === "night" ? "bg-zinc-950/80 border-zinc-800" : "bg-white/90 border-zinc-200 shadow-xl"
+          }`}>
+            <div className={`absolute top-4 right-4 px-2.5 py-0.5 rounded border text-[10px] font-mono ${
+              theme === "night" ? "bg-zinc-900 border-zinc-800 text-zinc-400" : "bg-zinc-100 border-zinc-200 text-zinc-600"
+            }`}>
+              Illustrative data
+            </div>
 
-        <p
-          className={`text-lg md:text-2xl text-zinc-300 max-w-3xl mb-14 font-normal leading-relaxed transition-all duration-1000 delay-400 transform ${
-            isLoaded ? "translate-y-0 opacity-100" : "translate-y-10 opacity-0"
-          }`}
-        >
-          Bank-secure multi-tenant infrastructure, cryptographic audit ledgers, and real-time exact-decimal GAAP reporting designed for world-class enterprises.
+            <div className="space-y-6">
+              <div>
+                <p className="text-xs font-mono text-zinc-500 uppercase">Executive Overview</p>
+                <h3 className={`text-lg font-semibold mt-1 ${theme === "night" ? "text-white" : "text-zinc-900"}`}>Q1 Financial Performance</h3>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div className={`p-4 rounded-2xl border ${theme === "night" ? "bg-zinc-900/60 border-zinc-800" : "bg-zinc-50 border-zinc-200"}`}>
+                  <p className="text-xs text-zinc-400">Revenue</p>
+                  <p className={`text-xl font-bold mt-1 font-mono ${theme === "night" ? "text-white" : "text-zinc-900"}`}>₹12.4M</p>
+                  <span className="text-[10px] text-emerald-500 font-mono">↑ 5.7% vs prior</span>
+                </div>
+                <div className={`p-4 rounded-2xl border ${theme === "night" ? "bg-zinc-900/60 border-zinc-800" : "bg-zinc-50 border-zinc-200"}`}>
+                  <p className="text-xs text-zinc-400">Gross Profit</p>
+                  <p className={`text-xl font-bold mt-1 font-mono ${theme === "night" ? "text-white" : "text-zinc-900"}`}>₹7.8M</p>
+                  <span className="text-[10px] text-emerald-500 font-mono">Margin 62.9%</span>
+                </div>
+                <div className={`p-4 rounded-2xl border ${theme === "night" ? "bg-zinc-900/60 border-zinc-800" : "bg-zinc-50 border-zinc-200"}`}>
+                  <p className="text-xs text-zinc-400">Cash Position</p>
+                  <p className={`text-xl font-bold mt-1 font-mono ${theme === "night" ? "text-white" : "text-zinc-900"}`}>₹18.6M</p>
+                  <span className="text-[10px] text-blue-500 font-mono">Stable</span>
+                </div>
+              </div>
+
+              <div className={`p-4 rounded-2xl border space-y-1 ${theme === "night" ? "bg-blue-950/20 border-blue-900/30 text-zinc-300" : "bg-blue-50 border-blue-100 text-zinc-700"}`}>
+                <p className="text-xs font-mono text-blue-500 uppercase tracking-wider">Key Financial Insight</p>
+                <p className="text-sm">
+                  "Operating expenses increased 8.4% this period, primarily driven by personnel and technology costs."
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className={`border-y py-10 px-6 z-10 ${theme === "night" ? "border-zinc-800/80 bg-zinc-950/50" : "border-zinc-200 bg-white/50"}`}>
+        <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 text-center font-mono text-xs">
+          <div className="space-y-1">
+            <p className={`font-bold text-sm ${theme === "night" ? "text-white" : "text-zinc-900"}`}>Trusted Data</p>
+            <p className="text-zinc-500">Normalized inputs</p>
+          </div>
+          <div className="space-y-1">
+            <p className={`font-bold text-sm ${theme === "night" ? "text-white" : "text-zinc-900"}`}>Deterministic Calculations</p>
+            <p className="text-zinc-500">Exact-decimal math</p>
+          </div>
+          <div className="space-y-1">
+            <p className={`font-bold text-sm ${theme === "night" ? "text-white" : "text-zinc-900"}`}>Clear Insights</p>
+            <p className="text-zinc-500">Actionable context</p>
+          </div>
+          <div className="space-y-1">
+            <p className={`font-bold text-sm ${theme === "night" ? "text-white" : "text-zinc-900"}`}>Auditability</p>
+            <p className="text-zinc-500">SHA-256 lineage</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="problem" className="py-28 px-6 max-w-7xl mx-auto w-full z-10">
+        <div className="text-center max-w-2xl mx-auto space-y-4 mb-16">
+          <h2 className={`text-3xl md:text-5xl font-bold tracking-tight ${theme === "night" ? "text-white" : "text-zinc-900"}`}>
+            Your financial data is everywhere.<br />
+            <span className="text-zinc-400">Your financial reality shouldn't be.</span>
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+          {[
+            { title: "Fragmented data", desc: "Financial information often lives across multiple systems, files, and workflows." },
+            { title: "Manual analysis", desc: "Teams spend valuable time collecting, cleaning, reconciling, and interpreting information." },
+            { title: "Slow decisions", desc: "When financial context is scattered, understanding what is happening becomes harder and slower." }
+          ].map((card, i) => (
+            <div key={i} className={`p-8 rounded-3xl border transition-all duration-300 hover:-translate-y-1 ${
+              theme === "night" ? "bg-zinc-950/80 border-zinc-800" : "bg-white border-zinc-200 shadow-xl"
+            }`}>
+              <h3 className={`text-lg font-semibold mb-3 ${theme === "night" ? "text-white" : "text-zinc-900"}`}>{card.title}</h3>
+              <p className="text-sm text-zinc-500 leading-relaxed">{card.desc}</p>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-center font-mono text-xs text-blue-500 font-semibold">
+          FINOS is designed to bring the pieces together.
         </p>
+      </section>
 
-        <div
-          className={`flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-6 w-full max-w-md transition-all duration-1000 delay-600 transform ${
-            isLoaded ? "translate-y-0 opacity-100" : "translate-y-12 opacity-0"
-          }`}
-        >
-          <Link
-            href="/signup"
-            className="w-full sm:w-auto px-9 py-4 rounded-full bg-gradient-to-r from-blue-600 to-emerald-600 hover:from-blue-500 hover:to-emerald-500 text-white font-bold text-sm transition-all duration-300 shadow-[0_0_45px_rgba(37,99,235,0.6)] transform hover:scale-105"
-          >
-            Deploy Core Engine
+      <section id="product" className={`py-28 px-6 max-w-7xl mx-auto w-full border-t z-10 ${theme === "night" ? "border-zinc-800/80" : "border-zinc-200"}`}>
+        <div className="text-center max-w-2xl mx-auto space-y-4 mb-16">
+          <h2 className={`text-3xl md:text-5xl font-bold tracking-tight ${theme === "night" ? "text-white" : "text-zinc-900"}`}>
+            One place to understand your financial reality.
+          </h2>
+          <p className="text-zinc-500 text-base">
+            FINOS organizes financial information into a clearer operating view of the business.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+          {[
+            { title: "Financial Overview", desc: "See the financial metrics that matter most in one place." },
+            { title: "Revenue & Cost Intelligence", desc: "Understand where revenue comes from, where costs are going, and how margins are changing." },
+            { title: "Financial Insights", desc: "Surface meaningful changes and patterns across your financial data." },
+            { title: "Financial Data Foundation", desc: "Structure financial information so calculations and analysis are based on a consistent underlying dataset." }
+          ].map((card, i) => (
+            <div key={i} className={`p-8 rounded-3xl border ${
+              theme === "night" ? "bg-zinc-950/80 border-zinc-800" : "bg-white border-zinc-200 shadow-xl"
+            }`}>
+              <h3 className={`text-lg font-semibold mb-3 ${theme === "night" ? "text-white" : "text-zinc-900"}`}>{card.title}</h3>
+              <p className="text-sm text-zinc-500 leading-relaxed">{card.desc}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="text-center">
+          <Link href="/dashboard" className="inline-block px-8 py-3.5 rounded-xl font-medium text-sm border transition bg-zinc-900 hover:bg-zinc-800 text-white border-zinc-800">
+            Explore FinOS
           </Link>
-          <Link
-            href="/login"
-            className="w-full sm:w-auto px-9 py-4 rounded-full bg-zinc-900/90 hover:bg-zinc-800 text-zinc-200 hover:text-white border border-white/15 font-bold text-sm transition-all duration-300 backdrop-blur-xl"
-          >
-            Tenant Gateway
-          </Link>
+        </div>
+      </section>
+
+      <section id="how-it-works" className={`py-28 px-6 max-w-7xl mx-auto w-full border-t z-10 ${theme === "night" ? "border-zinc-800/80" : "border-zinc-200"}`}>
+        <div className="text-center max-w-2xl mx-auto space-y-4 mb-16">
+          <h2 className={`text-3xl md:text-5xl font-bold tracking-tight ${theme === "night" ? "text-white" : "text-zinc-900"}`}>
+            From financial data to financial clarity.
+          </h2>
+          <p className="text-zinc-500 text-base">
+            FINOS is designed around a simple flow.
+          </p>
         </div>
 
-        {/* Feature Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-36 w-full text-left z-10">
-          <div className="p-8 rounded-3xl bg-zinc-950/90 border border-white/10 backdrop-blur-2xl hover:border-blue-500/60 transition duration-500 group shadow-2xl">
-            <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 text-2xl mb-6 group-hover:scale-110 transition">
-              ⚡
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {[
+            { step: "STEP 01", title: "Connect", desc: "Bring your financial information into FinOS through supported data sources and workflows." },
+            { step: "STEP 02", title: "Structure", desc: "Organize and normalize financial information into a consistent representation." },
+            { step: "STEP 03", title: "Understand", desc: "Calculate financial metrics and identify meaningful patterns across the business." },
+            { step: "STEP 04", title: "Decide", desc: "Use clearer financial context to investigate issues and make better-informed decisions." }
+          ].map((s, i) => (
+            <div key={i} className={`p-6 rounded-2xl border space-y-2 ${
+              theme === "night" ? "bg-zinc-950/80 border-zinc-800" : "bg-white border-zinc-200 shadow-lg"
+            }`}>
+              <span className="font-mono text-xs text-blue-500 font-bold">{s.step}</span>
+              <h3 className={`text-base font-semibold ${theme === "night" ? "text-white" : "text-zinc-900"}`}>{s.title}</h3>
+              <p className="text-xs text-zinc-500 leading-relaxed">{s.desc}</p>
             </div>
-            <h3 className="text-xl font-bold text-white mb-3">Quantum Ingestion</h3>
-            <p className="text-sm text-zinc-300 leading-relaxed">
-              Magic-byte secure parsing with automated formula injection defenses and exact-decimal quantization streams.
-            </p>
-          </div>
+          ))}
+        </div>
+      </section>
 
-          <div className="p-8 rounded-3xl bg-zinc-950/90 border border-white/10 backdrop-blur-2xl hover:border-emerald-500/60 transition duration-500 group shadow-2xl">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 text-2xl mb-6 group-hover:scale-110 transition">
-              🛡️
-            </div>
-            <h3 className="text-xl font-bold text-white mb-3">Cryptographic Lineage</h3>
-            <p className="text-sm text-zinc-300 leading-relaxed">
-              SHA-256 audit ledgers tracking every single transaction back to its immutable genesis record in PostgreSQL.
-            </p>
-          </div>
+      <section id="security" className={`py-28 px-6 max-w-7xl mx-auto w-full border-t z-10 ${theme === "night" ? "border-zinc-800/80" : "border-zinc-200"}`}>
+        <div className="text-center max-w-2xl mx-auto space-y-4 mb-16">
+          <h2 className={`text-3xl md:text-5xl font-bold tracking-tight ${theme === "night" ? "text-white" : "text-zinc-900"}`}>
+            Financial software should be built around trust.
+          </h2>
+          <p className="text-zinc-500 text-base">
+            Security, access control, data integrity, and transparency are foundational to the product.
+          </p>
+        </div>
 
-          <div className="p-8 rounded-3xl bg-zinc-950/90 border border-white/10 backdrop-blur-2xl hover:border-indigo-500/60 transition duration-500 group shadow-2xl">
-            <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 text-2xl mb-6 group-hover:scale-110 transition">
-              📊
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+          {[
+            { title: "Access Control", desc: "Users should only access the financial information they are authorized to see." },
+            { title: "Data Integrity", desc: "Financial calculations should be based on structured and validated data." },
+            { title: "Transparency", desc: "Important financial outputs should be explainable and traceable to their underlying data." },
+            { title: "Isolation", desc: "Business data should remain separated according to organizational boundaries." }
+          ].map((card, i) => (
+            <div key={i} className={`p-8 rounded-3xl border ${
+              theme === "night" ? "bg-zinc-950/80 border-zinc-800" : "bg-white border-zinc-200 shadow-xl"
+            }`}>
+              <h3 className={`text-lg font-semibold mb-3 ${theme === "night" ? "text-white" : "text-zinc-900"}`}>{card.title}</h3>
+              <p className="text-sm text-zinc-500 leading-relaxed">{card.desc}</p>
             </div>
-            <h3 className="text-xl font-bold text-white mb-3">Dynamic GAAP Reporting</h3>
-            <p className="text-sm text-zinc-300 leading-relaxed">
-              Instant multi-tenant Balance Sheets, Income Statements, and Cash Flows isolated via PostgreSQL Row-Level Security.
-            </p>
+          ))}
+        </div>
+      </section>
+
+      <section className={`py-28 px-6 max-w-5xl mx-auto w-full text-center border-t z-10 ${theme === "night" ? "border-zinc-800/80" : "border-zinc-200"}`}>
+        <div className={`p-12 rounded-3xl border space-y-6 shadow-2xl ${
+          theme === "night" ? "bg-gradient-to-b from-blue-950/30 to-zinc-950 border-blue-950" : "bg-blue-50/50 border-blue-100"
+        }`}>
+          <h2 className={`text-3xl md:text-5xl font-bold tracking-tight ${theme === "night" ? "text-white" : "text-zinc-900"}`}>
+            Start with a clearer view of your finances.
+          </h2>
+          <p className="text-base text-zinc-500 max-w-xl mx-auto">
+            Bring your financial data into one place and start understanding your business with greater clarity.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center space-y-3 sm:space-y-0 sm:space-x-4 pt-4">
+            <Link href="/signup" className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm transition shadow-lg shadow-blue-600/30">
+              Get Started
+            </Link>
+            <Link href="/login" className={`w-full sm:w-auto px-8 py-3.5 rounded-xl font-medium text-sm transition border ${
+              theme === "night" ? "bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-800" : "bg-white hover:bg-zinc-100 text-zinc-700 border-zinc-200 shadow-sm"
+            }`}>
+              Log in
+            </Link>
           </div>
         </div>
-      </main>
+      </section>
 
-      {/* Footer */}
-      <footer className="w-full max-w-7xl mx-auto px-8 py-10 border-t border-white/10 flex items-center justify-between text-xs font-mono text-zinc-400 z-20 backdrop-blur-md bg-[#010308]/40">
-        <span>FinOS Core Engine. Designed for absolute financial dominance.</span>
-        <div className="flex items-center space-x-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-zinc-300 font-semibold">All Datacenters Nominal</span>
-        </div>
-      </footer>
+      <div className="z-20">
+        <LandingFooter />
+      </div>
     </div>
   );
 }

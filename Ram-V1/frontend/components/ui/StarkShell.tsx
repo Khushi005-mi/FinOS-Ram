@@ -42,7 +42,7 @@ export default function StarkShell({ children }: { children: React.ReactNode }) 
               <Link
                 key={item.href}
                 href={item.href}
-                className={}
+                className="px-4 py-1.5 rounded-lg text-xs font-medium transition-all text-zinc-400 hover:text-zinc-200 hover:bg-white/5"
               >
                 {item.name}
               </Link>

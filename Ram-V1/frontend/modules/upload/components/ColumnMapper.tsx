@@ -37,7 +37,7 @@ export function ColumnMapper({ file }: ColumnMapperProps) {
     <div className="space-y-4">
       {error && (
         <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 border border-red-200">
-          {typeof error === "string" ? error : (error?.message || JSON.stringify(error))}
+          {typeof error === "string" ? error : (((error as any)?.message || String(error)) || JSON.stringify(error))}
         </div>
       )}
 

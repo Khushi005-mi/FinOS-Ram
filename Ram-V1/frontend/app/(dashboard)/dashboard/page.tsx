@@ -82,7 +82,7 @@ export default function DashboardPage() {
 
       {error && (
         <div className="p-4 bg-red-900/30 border border-red-800 rounded-lg text-red-200 text-sm">
-          {typeof error === "string" ? error : (error?.message || JSON.stringify(error))}
+          {typeof error === "string" ? error : ((error as any)?.message || JSON.stringify(error))}
         </div>
       )}
 

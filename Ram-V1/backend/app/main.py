@@ -23,6 +23,20 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing FinOS Enterprise Core Gateway...")
     try:
         async with AsyncSessionLocal() as db:
+            # Automated Production Schema Self-Healing
+            await db.execute(text("""
+                ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS file_checksum_sha256 VARCHAR(64);
+                ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS calculation_version VARCHAR(50) DEFAULT 'v1.0-deterministic';
+                ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS error_message VARCHAR(1000);
+                ALTER TABLE organizations ADD COLUMN IF NOT EXISTS active_batch_id VARCHAR(36);
+                ALTER TABLE users ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+                ALTER TABLE users ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+                ALTER TABLE upload_batches ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+                ALTER TABLE upload_batches ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+            """))
+            await db.commit()
+            logger.info("FinOS Enterprise Schema verified and synced.")
+
             # Complete Institutional Schema Self-Healing
             await db.execute(text("""
                 ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS file_checksum_sha256 VARCHAR(64);

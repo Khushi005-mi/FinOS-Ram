@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Numeric, String, UUID, func
@@ -41,13 +41,15 @@ class DecisionRecommendation(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
         server_default=func.now(),
         nullable=False,
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         server_default=func.now(),
-        onupdate=func.now(),
         nullable=False,
     )

@@ -157,3 +157,16 @@ def verify_password_reset_token(token: str) -> Optional[dict]:
         return payload
     except Exception:
         return None
+
+
+def create_refresh_token(subject: str, organization_id: str, role: str = 'ANALYST', email: str = '') -> str:
+    expire = datetime.utcnow() + timedelta(days=30)
+    to_encode = {
+        'exp': expire,
+        'sub': str(subject),
+        'org_id': str(organization_id),
+        'role': str(role),
+        'email': str(email),
+        'type': 'refresh',
+    }
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)

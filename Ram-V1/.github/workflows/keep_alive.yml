@@ -1,0 +1,18 @@
+name: FinOS 24/7 Always-Warm Production Keep-Alive
+
+on:
+  schedule:
+    # Run every 5 minutes (Cron: */5 * * * *)
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  keep-warm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping FinOS Core Backend
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" https://finosv1-backend-api.onrender.com/healthz || true
+      - name: Ping FinOS Frontend Gateway
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" https://finos-frontend-ui.onrender.com || true

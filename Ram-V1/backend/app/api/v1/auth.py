@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.security import (
     create_access_token,
+    create_refresh_token,
     create_password_reset_token,
     get_current_tenant_user,
     get_password_hash,
@@ -19,6 +20,7 @@ from app.db.models.organization import Organization
 from app.db.models.user import User
 from app.db.session import get_db
 from app.schemas.auth import (
+    RefreshTokenRequest,
     LoginRequest,
     SignupRequest,
     PasswordChangeRequest,
@@ -300,3 +302,49 @@ async def get_my_profile(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
     return user
+
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Exchange 30-day refresh token for a fresh short-lived session token",
+)
+async def refresh_session(payload: RefreshTokenRequest, response: Response, db: AsyncSession = Depends(get_db)):
+    from jose import jwt, JWTError
+    try:
+        data = jwt.decode(payload.refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if data.get('type') != 'refresh':
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid token category.')
+        user_id = data.get('sub')
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Refresh token expired or invalid.')
+
+    stmt = select(User).where(User.id == uuid.UUID(str(user_id)))
+    res = await db.execute(stmt)
+    user = res.scalar_one_or_none()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='User deactivated or revoked.')
+
+    new_access_token = create_access_token(
+        subject=str(user.id),
+        organization_id=str(user.organization_id),
+        role=user.role,
+        email=user.email,
+    )
+    new_refresh_token = create_refresh_token(
+        subject=str(user.id),
+        organization_id=str(user.organization_id),
+        role=user.role,
+        email=user.email,
+    )
+    _set_auth_cookie(response, new_access_token)
+
+    return TokenResponse(
+        access_token=new_access_token,
+        refresh_token=new_refresh_token,
+        token_type="bearer",
+        user_id=str(user.id),
+        organization_id=str(user.organization_id),
+        role=user.role,
+        email=user.email,
+    )

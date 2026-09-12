@@ -25,23 +25,25 @@ async def lifespan(app: FastAPI):
     try:
         async with AsyncSessionLocal() as db:
             # Automated Zero-Drift Production Schema Sync
-            await db.execute(text("""
-                ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS file_checksum_sha256 VARCHAR(64);
-                ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS calculation_version VARCHAR(50) DEFAULT 'v1.0-deterministic';
-                ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS error_message VARCHAR(1000);
-                ALTER TABLE organizations ADD COLUMN IF NOT EXISTS active_batch_id VARCHAR(36);
-                ALTER TABLE organizations ADD COLUMN IF NOT EXISTS industry_type VARCHAR(50) DEFAULT 'GENERAL_SMB';
-                ALTER TABLE organizations ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'USD';
-                ALTER TABLE organizations ADD COLUMN IF NOT EXISTS fiscal_year_start INTEGER DEFAULT 1;
-                ALTER TABLE organizations ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
-                ALTER TABLE users ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
-                ALTER TABLE users ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
-                ALTER TABLE upload_batches ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
-                ALTER TABLE upload_batches ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
-                ALTER TABLE organizations ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
-                ALTER TABLE organizations ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
-                ALTER TABLE journal_entries ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
-            """))
+            schema_statements = [
+                "ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS file_checksum_sha256 VARCHAR(64)",
+                "ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS calculation_version VARCHAR(50) DEFAULT 'v1.0-deterministic'",
+                "ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS error_message VARCHAR(1000)",
+                "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS active_batch_id VARCHAR(36)",
+                "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS industry_type VARCHAR(50) DEFAULT 'GENERAL_SMB'",
+                "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'USD'",
+                "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS fiscal_year_start INTEGER DEFAULT 1",
+                "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE",
+                "ALTER TABLE users ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP",
+                "ALTER TABLE users ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP",
+                "ALTER TABLE upload_batches ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP",
+                "ALTER TABLE upload_batches ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP",
+                "ALTER TABLE organizations ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP",
+                "ALTER TABLE organizations ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP",
+                "ALTER TABLE journal_entries ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP"
+            ]
+            for stmt in schema_statements:
+                await db.execute(text(stmt))
             await db.commit()
             logger.info("FinOS Enterprise Schema self-healing verified.")
 

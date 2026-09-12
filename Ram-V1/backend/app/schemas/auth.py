@@ -21,6 +21,15 @@ class PasswordChangeRequest(BaseModel):
     new_password: str = Field(..., min_length=8)
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., min_length=5)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=10)
+    new_password: str = Field(..., min_length=8)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

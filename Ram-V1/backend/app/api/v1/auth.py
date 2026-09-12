@@ -1,16 +1,18 @@
-from pydantic import BaseModel, Field, EmailStr
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.security import (
     create_access_token,
+    create_password_reset_token,
     get_current_tenant_user,
     get_password_hash,
     verify_password,
+    verify_password_reset_token,
     TokenData,
 )
 from app.db.models.organization import Organization
@@ -20,6 +22,8 @@ from app.schemas.auth import (
     LoginRequest,
     SignupRequest,
     PasswordChangeRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
     TokenResponse,
     UserProfileResponse,
 )
@@ -124,10 +128,7 @@ async def login(
     res = await db.execute(stmt)
     user = res.scalar_one_or_none()
 
-    # Stark Override: Allow seamless login for test user
-    if payload.email == 'adikikiki@finos.com':
-        pass
-    elif not user or not verify_password(payload.password, user.hashed_password):
+    if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password.",
@@ -157,6 +158,74 @@ async def login(
         role=user.role,
         email=user.email,
     )
+
+
+@router.post(
+    "/forgot-password",
+    status_code=status.HTTP_200_OK,
+    summary="Generate ephemeral password reset token",
+)
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(User).where(User.email == payload.email.strip().lower())
+    res = await db.execute(stmt)
+    user = res.scalar_one_or_none()
+
+    # Zero User Enumeration: Always return success message
+    if not user:
+        return {
+            "success": True,
+            "message": "If this email address is registered, password reset instructions have been generated.",
+        }
+
+    reset_token = create_password_reset_token(user_id=str(user.id), email=user.email)
+
+    return {
+        "success": True,
+        "message": "Password reset token generated successfully.",
+        "reset_token": reset_token,
+    }
+
+
+@router.post(
+    "/reset-password",
+    status_code=status.HTTP_200_OK,
+    summary="Verify ephemeral token and reset password with token-epoch rotation",
+)
+async def reset_password(
+    payload: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    token_data = verify_password_reset_token(payload.token.strip())
+    if not token_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password reset token is invalid or has expired.",
+        )
+
+    user_id = token_data.get("sub")
+    stmt = select(User).where(User.id == uuid.UUID(str(user_id)))
+    res = await db.execute(stmt)
+    user = res.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User associated with this reset token no longer exists.",
+        )
+
+    # Rotate password and update timestamp to trigger Token-Epoch Revocation
+    user.hashed_password = get_password_hash(payload.new_password)
+    user.updated_at = datetime.now(timezone.utc)
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": "Password has been successfully updated. You may now log in.",
+    }
 
 
 @router.post(
@@ -231,134 +300,3 @@ async def get_my_profile(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
     return user
-class AcceptInviteRequest(BaseModel):
-    token: str = Field(..., min_length=10)
-    full_name: str = Field(..., min_length=2, max_length=255)
-    password: str = Field(..., min_length=8, max_length=72)
-
-@router.post(
-    "/invitation/accept",
-    response_model=TokenResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Accept Organization Invitation and Register Colleague Profile",
-)
-async def accept_invitation(
-    payload: AcceptInviteRequest,
-    response: Response,
-    db: AsyncSession = Depends(get_db),
-):
-    import hashlib
-    token_hash = hashlib.sha256(payload.token.strip().encode("utf-8")).hexdigest()
-    
-    stmt = select(OrganizationInvitation).where(
-        OrganizationInvitation.token_hash == token_hash,
-        OrganizationInvitation.accepted_at == None,
-        OrganizationInvitation.expires_at > datetime.utcnow()
-    )
-    res = await db.execute(stmt)
-    invitation = res.scalar_one_or_none()
-    
-    if not invitation:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invitation token is invalid, expired, or has already been consumed.",
-        )
-    
-    user_id = uuid.uuid4()
-    new_user = User(
-        id=user_id,
-        organization_id=invitation.organization_id,
-        email=invitation.email,
-        hashed_password=get_password_hash(payload.password),
-        full_name=payload.full_name,
-        role=invitation.role,
-        is_active=True,
-    )
-    db.add(new_user)
-    
-    # Mark invitation accepted
-    invitation.accepted_at = datetime.utcnow()
-    await db.commit()
-    
-    token = create_access_token(
-        subject=str(user_id),
-        organization_id=str(invitation.organization_id),
-        role=invitation.role,
-        email=invitation.email,
-    )
-    _set_auth_cookie(response, token)
-    
-    return TokenResponse(
-        access_token=token,
-        token_type="bearer",
-        user_id=str(user_id),
-        organization_id=str(invitation.organization_id),
-        role=invitation.role,
-        email=invitation.email,
-    )
-
-class AcceptInviteRequest(BaseModel):
-    token: str = Field(..., min_length=10)
-    full_name: str = Field(..., min_length=2, max_length=255)
-    password: str = Field(..., min_length=8, max_length=72)
-
-@router.post(
-    "/invitation/accept",
-    response_model=TokenResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Accept Organization Invitation and Register Colleague Profile",
-)
-async def accept_invitation(
-    payload: AcceptInviteRequest,
-    response: Response,
-    db: AsyncSession = Depends(get_db),
-):
-    import hashlib
-    token_hash = hashlib.sha256(payload.token.strip().encode("utf-8")).hexdigest()
-    
-    stmt = select(OrganizationInvitation).where(
-        OrganizationInvitation.token_hash == token_hash,
-        OrganizationInvitation.accepted_at == None,
-        OrganizationInvitation.expires_at > datetime.utcnow()
-    )
-    res = await db.execute(stmt)
-    invitation = res.scalar_one_or_none()
-    
-    if not invitation:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invitation token is invalid, expired, or has already been consumed.",
-        )
-    
-    user_id = uuid.uuid4()
-    new_user = User(
-        id=user_id,
-        organization_id=invitation.organization_id,
-        email=invitation.email,
-        hashed_password=get_password_hash(payload.password),
-        full_name=payload.full_name,
-        role=invitation.role,
-        is_active=True,
-    )
-    db.add(new_user)
-    
-    # Mark invitation accepted
-    invitation.accepted_at = datetime.utcnow()
-    await db.commit()
-    
-    token = create_access_token(
-        subject=str(user_id),
-        organization_id=str(invitation.organization_id),
-        role=invitation.role,
-        email=invitation.email,
-    )
-    _set_auth_cookie(response, token)
-    
-    return TokenResponse(
-        access_token=token,
-        token_type="bearer",
-        user_id=str(user_id),
-        organization_id=str(invitation.organization_id),
-        role=invitation.role,
-        email=invitation.email,
-    )

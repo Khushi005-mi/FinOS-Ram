@@ -27,7 +27,8 @@ export function ColumnMapper({ file }: ColumnMapperProps) {
       router.push("/dashboard");
     } catch (err: any) {
       console.error("Upload failed:", err);
-      setError(err.response?.data?.detail || err.message || "Failed to process batch");
+      const msg = err.response?.data?.error?.message || err.response?.data?.detail || err.message || "Failed to process batch";
+      setError(typeof msg === "object" ? JSON.stringify(msg) : msg);
     } finally {
       setLoading(false);
     }

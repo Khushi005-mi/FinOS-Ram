@@ -117,3 +117,43 @@ def require_roles(allowed_roles: List[str]):
             )
         return current_user
     return role_checker
+
+def create_password_reset_token(user_id: str, email: str) -> str:
+    expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode = {
+        "exp": expire,
+        "sub": str(user_id),
+        "email": str(email),
+        "type": "password_reset",
+    }
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def verify_password_reset_token(token: str) -> Optional[dict]:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("type") != "password_reset":
+            return None
+        return payload
+    except Exception:
+        return None
+
+def create_password_reset_token(user_id: str, email: str) -> str:
+    expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode = {
+        "exp": expire,
+        "sub": str(user_id),
+        "email": str(email),
+        "type": "password_reset",
+    }
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def verify_password_reset_token(token: str) -> Optional[dict]:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("type") != "password_reset":
+            return None
+        return payload
+    except Exception:
+        return None

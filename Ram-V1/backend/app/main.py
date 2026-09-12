@@ -2,9 +2,10 @@ from contextlib import asynccontextmanager
 import logging
 import time
 import uuid
+import os
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import select, text
 
 from app.api.router import api_router
@@ -23,34 +24,28 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing FinOS Enterprise Core Gateway...")
     try:
         async with AsyncSessionLocal() as db:
-            # Automated Production Schema Self-Healing
+            # Automated Zero-Drift Production Schema Sync
             await db.execute(text("""
                 ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS file_checksum_sha256 VARCHAR(64);
                 ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS calculation_version VARCHAR(50) DEFAULT 'v1.0-deterministic';
                 ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS error_message VARCHAR(1000);
                 ALTER TABLE organizations ADD COLUMN IF NOT EXISTS active_batch_id VARCHAR(36);
+                ALTER TABLE organizations ADD COLUMN IF NOT EXISTS industry_type VARCHAR(50) DEFAULT 'GENERAL_SMB';
+                ALTER TABLE organizations ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'USD';
+                ALTER TABLE organizations ADD COLUMN IF NOT EXISTS fiscal_year_start INTEGER DEFAULT 1;
+                ALTER TABLE organizations ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
                 ALTER TABLE users ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
                 ALTER TABLE users ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
                 ALTER TABLE upload_batches ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
                 ALTER TABLE upload_batches ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
-            """))
-            await db.commit()
-            logger.info("FinOS Enterprise Schema verified and synced.")
-
-            # Complete Institutional Schema Self-Healing
-            await db.execute(text("""
-                ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS file_checksum_sha256 VARCHAR(64);
-                ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS calculation_version VARCHAR(50) DEFAULT 'v1.0-deterministic';
-                ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS error_message VARCHAR(1000);
-                ALTER TABLE organizations ADD COLUMN IF NOT EXISTS active_batch_id VARCHAR(36);
-                ALTER TABLE users ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
-                ALTER TABLE users ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
-                ALTER TABLE upload_batches ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
-                ALTER TABLE upload_batches ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+                ALTER TABLE organizations ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+                ALTER TABLE organizations ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+                ALTER TABLE journal_entries ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
             """))
             await db.commit()
             logger.info("FinOS Enterprise Schema self-healing verified.")
 
+            # Seed default master enterprise tenant if not exists
             org_id = uuid.UUID("11111111-1111-1111-1111-111111111111")
             stmt = select(Organization).where(Organization.id == org_id)
             res = await db.execute(stmt)
@@ -122,7 +117,7 @@ app.add_middleware(
     expose_headers=["X-Request-ID", "Content-Disposition"],
 )
 
-# 3. Global Exception Handlers (Ensuring CORS on Errors)
+# 3. Global Exception Handlers (Ensuring CORS & Correlation IDs on Errors)
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     req_id = request_id_ctx.get()
@@ -146,7 +141,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     req_id = request_id_ctx.get()
     origin = request.headers.get("origin", "")
     headers = {}
-    if origin in ALLOWED_ORIGINS or ".onrender.com" in origin:
+    if origin in ALLOWED_ORIGINS or ".onrender.com" in origin or "localhost" in origin:
         headers["Access-Control-Allow-Origin"] = origin
         headers["Access-Control-Allow-Credentials"] = "true"
 
@@ -164,7 +159,12 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         },
     )
 
-# 4. Probes
+# 4. Root Redirect to Interactive Documentation
+@app.get("/", include_in_schema=False)
+async def root():
+    return RedirectResponse(url="/docs")
+
+# 5. Probes: Liveness & Deep PostgreSQL 16 Readiness
 @app.get("/healthz", status_code=status.HTTP_200_OK, tags=["SRE Health Probes"])
 async def liveness_probe():
     return {"status": "alive", "project": settings.PROJECT_NAME}

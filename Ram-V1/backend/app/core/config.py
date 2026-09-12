@@ -41,7 +41,7 @@ class Settings(BaseSettings):
         env="SECRET_KEY",
     )
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 Days
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30  # 30 Days Resilient Session * 24 * 7  # 7 Days
 
 
 settings = Settings()

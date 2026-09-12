@@ -1,0 +1,20 @@
+name: FinOS 24/7 Always-Warm Production Keep-Alive
+
+on:
+  schedule:
+    # Ping every 5 minutes to prevent Render free-tier containers from sleeping
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  keep-warm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep FinOS Backend Warm
+        run: |
+          curl -s -o /dev/null -w "Backend Status: %{http_code}
+" https://finosv1-backend-api.onrender.com/healthz || true
+      - name: Keep FinOS Frontend Warm
+        run: |
+          curl -s -o /dev/null -w "Frontend Status: %{http_code}
+" https://finos-frontend-ui.onrender.com || true

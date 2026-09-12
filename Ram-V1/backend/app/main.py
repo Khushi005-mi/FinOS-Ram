@@ -26,6 +26,9 @@ async def lifespan(app: FastAPI):
         async with AsyncSessionLocal() as db:
             # Automated Zero-Drift Production Schema Sync
             schema_statements = [
+                "CREATE TABLE IF NOT EXISTS audit_logs (id UUID PRIMARY KEY, organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, user_id UUID REFERENCES users(id) ON DELETE SET NULL, event_type VARCHAR(100) NOT NULL, description VARCHAR(1000) NOT NULL, metadata_payload JSONB DEFAULT '{}'::jsonb, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL)",
+                "CREATE INDEX IF NOT EXISTS ix_audit_logs_org_id ON audit_logs (organization_id)",
+
                 "ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS file_checksum_sha256 VARCHAR(64)",
                 "ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS calculation_version VARCHAR(50) DEFAULT 'v1.0-deterministic'",
                 "ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS error_message VARCHAR(1000)",

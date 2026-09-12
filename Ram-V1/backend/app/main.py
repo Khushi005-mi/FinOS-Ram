@@ -9,11 +9,9 @@ from sqlalchemy import select, text
 
 from app.api.router import api_router
 from app.core.config import settings
-from app.core.logging import setup_logging, request_id_ctx, tenant_id_ctx
-from app.db.base import Base
+from app.core.logging import setup_logging, request_id_ctx
 from app.db.models.organization import Organization
-from app.db.session import AsyncSessionLocal, engine
-import app.db.models
+from app.db.session import AsyncSessionLocal
 
 # Initialize structured JSON telemetry
 setup_logging()
@@ -76,7 +74,7 @@ async def telemetry_middleware(request: Request, call_next):
     )
     return response
 
-# 2. Hardened CORS
+# 2. Hardened Production CORS (Single Authority)
 ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:3001",
@@ -89,12 +87,14 @@ ALLOWED_ORIGINS = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://.*\.onrender\.com|https://.*\.vercel\.app|http://localhost:3000",
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID", "Content-Disposition"],
 )
 
-# 3. Global Exception Handlers
+# 3. Global Exception Handlers (Ensuring CORS on Errors)
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     req_id = request_id_ctx.get()
@@ -112,16 +112,37 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         },
     )
 
-# 4. Probes: Liveness & Deep PostgreSQL 16 Readiness
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    req_id = request_id_ctx.get()
+    origin = request.headers.get("origin", "")
+    headers = {}
+    if origin in ALLOWED_ORIGINS or ".onrender.com" in origin:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        headers=headers,
+        content={
+            "success": False,
+            "data": None,
+            "error": {
+                "code": "INTERNAL_SERVER_ERROR",
+                "message": "An internal error occurred during ledger transaction.",
+            },
+            "request_id": req_id,
+        },
+    )
+
+# 4. Probes
 @app.get("/healthz", status_code=status.HTTP_200_OK, tags=["SRE Health Probes"])
 async def liveness_probe():
-    """Liveness probe: verifies process event loop is unblocked."""
     return {"status": "alive", "project": settings.PROJECT_NAME}
-
 
 @app.get("/readyz", tags=["SRE Health Probes"])
 async def readiness_probe():
-    """Readiness probe: verifies live PostgreSQL 16 connectivity and round-trip latency."""
     start_time = time.time()
     try:
         async with AsyncSessionLocal() as session:
@@ -146,10 +167,5 @@ async def readiness_probe():
                 "error": str(exc),
             },
         )
-
-# Legacy probe compatibility
-@app.get("/health", status_code=status.HTTP_200_OK, tags=["SRE Health Probes"])
-async def health_check():
-    return {"status": "healthy", "project": settings.PROJECT_NAME}
 
 app.include_router(api_router, prefix=settings.API_V1_STR)

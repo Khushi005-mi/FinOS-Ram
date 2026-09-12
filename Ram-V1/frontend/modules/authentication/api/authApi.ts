@@ -43,6 +43,19 @@ export const authApi = {
     return resData;
   },
 
+  async forgotPassword(email: string): Promise<{ success: boolean; message: string; reset_token?: string }> {
+    const response = await apiClient.post("/auth/forgot-password", { email });
+    return response.data;
+  },
+
+  async resetPassword(token: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    const response = await apiClient.post("/auth/reset-password", {
+      token,
+      new_password: newPassword,
+    });
+    return response.data;
+  },
+
   async logout() {
     try {
       await apiClient.post("/auth/logout");

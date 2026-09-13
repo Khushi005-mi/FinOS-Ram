@@ -11,7 +11,7 @@ from app.services.ingestion_service import IngestionService
 logger = logging.getLogger("finos.ingestion")
 router = APIRouter(prefix="/ingestion", tags=["Data Ingestion & Mapper"])
 
-MAX_FILES_PER_BATCH = 10
+MAX_FILES_PER_BATCH = 25
 MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
 
 

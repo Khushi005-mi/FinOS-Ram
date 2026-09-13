@@ -17,6 +17,7 @@ from app.core.security import (
     TokenData,
 )
 from app.db.models.organization import Organization
+from app.db.models.invitation import OrganizationInvitation
 from app.db.models.user import User
 from app.db.session import get_db
 from app.schemas.auth import (
@@ -347,4 +348,73 @@ async def refresh_session(payload: RefreshTokenRequest, response: Response, db: 
         organization_id=str(user.organization_id),
         role=user.role,
         email=user.email,
+    )
+
+
+class AcceptInviteRequest(BaseModel):
+    token: str = Field(..., min_length=10)
+    full_name: str = Field(..., min_length=2, max_length=255)
+    password: str = Field(..., min_length=8, max_length=72)
+
+
+@router.post(
+    "/invitation/accept",
+    response_model=TokenResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Accept Organization Invitation and Register Colleague Profile",
+)
+async def accept_invitation(
+    payload: AcceptInviteRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
+    import hashlib
+    token_hash = hashlib.sha256(payload.token.strip().encode("utf-8")).hexdigest()
+
+    now_utc = datetime.now(timezone.utc)
+    stmt = select(OrganizationInvitation).where(
+        OrganizationInvitation.token_hash == token_hash,
+        OrganizationInvitation.accepted_at.is_(None),
+        OrganizationInvitation.expires_at > now_utc,
+    )
+    res = await db.execute(stmt)
+    invitation = res.scalar_one_or_none()
+
+    if not invitation:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invitation token is invalid, expired, or has already been used.",
+        )
+
+    user_id = uuid.uuid4()
+    new_user = User(
+        id=user_id,
+        organization_id=invitation.organization_id,
+        email=invitation.email,
+        hashed_password=get_password_hash(payload.password),
+        full_name=payload.full_name,
+        role=invitation.role,
+        is_active=True,
+    )
+    db.add(new_user)
+
+    # Mark invitation as accepted so it can never be reused
+    invitation.accepted_at = now_utc
+    await db.commit()
+
+    token = create_access_token(
+        subject=str(user_id),
+        organization_id=str(invitation.organization_id),
+        role=invitation.role,
+        email=invitation.email,
+    )
+    _set_auth_cookie(response, token)
+
+    return TokenResponse(
+        access_token=token,
+        token_type="bearer",
+        user_id=str(user_id),
+        organization_id=str(invitation.organization_id),
+        role=invitation.role,
+        email=invitation.email,
     )

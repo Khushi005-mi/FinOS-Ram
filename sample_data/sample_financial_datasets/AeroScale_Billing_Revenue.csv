@@ -1,0 +1,9 @@
+Transaction_Date,Invoice_ID,Account_Code,Account_Name,Account_Category,Description,Debit,Credit
+2026-08-01,INV-2026-8801,1200,Accounts Receivable,ASSET,Enterprise Platform Subscription - Palantir Tier,120000.00,0.00
+2026-08-01,INV-2026-8801,4010,SaaS Subscription Revenue,REVENUE,Enterprise Platform Subscription - Palantir Tier,0.00,120000.00
+2026-08-05,INV-2026-8802,1200,Accounts Receivable,ASSET,AI Inference Compute Metered Usage - ScaleAI,45500.00,0.00
+2026-08-05,INV-2026-8802,4020,Usage-Based API Revenue,REVENUE,AI Inference Compute Metered Usage - ScaleAI,0.00,45500.00
+2026-08-12,INV-2026-8803,1200,Accounts Receivable,ASSET,Custom LLM Pipeline Architecture Consulting,18750.00,0.00
+2026-08-12,INV-2026-8803,4030,Professional Services Revenue,REVENUE,Custom LLM Pipeline Architecture Consulting,0.00,18750.00
+2026-08-18,INV-2026-8804,1200,Accounts Receivable,ASSET,Mid-Market Tier Annual Contracts Batch 4,62400.00,0.00
+2026-08-18,INV-2026-8804,4010,SaaS Subscription Revenue,REVENUE,Mid-Market Tier Annual Contracts Batch 4,0.00,62400.00
